@@ -1,0 +1,201 @@
+import { useParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { CalendarDays, UserCircle, MessageCircle, BadgeCheck } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import { useEffect } from "react";
+import ReportAdDialog from "@/components/ReportAdDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSession } from "@/contexts/SessionContext";
+import SendMessageButton from "@/components/SendMessageButton";
+import MakeOfferDialog from "@/components/MakeOfferDialog";
+import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
+
+const fetchAdDetails = async (id: string) => {
+  const { data, error } = await supabase
+    .from("advertisements")
+    .select(`
+      *,
+      profiles ( id, full_name, phone, username, is_verified )
+    `)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data;
+};
+
+const AdDetails = () => {
+  const { id } = useParams<{ id: string }>();
+  const { user } = useSession();
+
+  useEffect(() => {
+    if (id) {
+      const incrementView = async () => {
+        await supabase.rpc('increment_ad_view_count', { ad_id_param: id });
+      };
+      incrementView();
+    }
+  }, [id]);
+
+  const { data: ad, isLoading, isError, error } = useQuery({
+    queryKey: ["adDetails", id],
+    queryFn: () => fetchAdDetails(id!),
+    enabled: !!id,
+  });
+
+  const formattedPrice = ad ? new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(ad.price) : "";
+
+  const formattedDate = ad ? safeFormatDate(ad.created_at, "dd 'de' LLLL 'de' yyyy") : "";
+
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
+        <Skeleton className="w-full h-96 rounded-lg" />
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-10 w-1/2" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-2/3" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="text-center py-10">
+        <h2 className="text-xl font-semibold text-red-600">Oops! Algo deu errado.</h2>
+        <p className="text-muted-foreground mt-2">Não foi possível carregar os detalhes do anúncio.</p>
+        <pre className="text-xs text-muted-foreground mt-2">{error.message}</pre>
+        <Button asChild variant="outline" className="mt-4">
+          <Link to="/">Voltar para a página inicial</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (!ad) {
+    return (
+      <div className="text-center py-10">
+        <h2 className="text-xl font-semibold">Anúncio não encontrado</h2>
+        <p className="text-muted-foreground mt-2">O anúncio que você está procurando não existe ou foi removido.</p>
+        <Button asChild variant="outline" className="mt-4">
+          <Link to="/">Voltar para a página inicial</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const isOwner = user && ad.profiles && user.id === ad.profiles.id;
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <Card className="overflow-hidden">
+        <div className="grid md:grid-cols-5">
+          <div className="md:col-span-3">
+            {ad.image_urls && ad.image_urls.length > 0 ? (
+              <Carousel className="w-full">
+                <CarouselContent>
+                  {ad.image_urls.map((url, index) => (
+                    <CarouselItem key={index}>
+                      <div className="aspect-square w-full">
+                        <img src={getOptimizedImageUrl(url, { width: 800, height: 800 })} alt={`${ad.title} - Imagem ${index + 1}`} className="w-full h-full object-cover" />
+                      </div>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+                {ad.image_urls.length > 1 && (
+                  <>
+                    <CarouselPrevious className="absolute left-4" />
+                    <CarouselNext className="absolute right-4" />
+                  </>
+                )}
+              </Carousel>
+            ) : (
+              <div className="w-full h-full bg-muted flex items-center justify-center aspect-square">
+                <p>Sem imagem</p>
+              </div>
+            )}
+          </div>
+          <div className="md:col-span-2 p-6 flex flex-col">
+            <CardHeader className="p-0 mb-4">
+              <CardTitle className="text-2xl font-bold">{ad.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 flex-grow space-y-4">
+              <p className="text-3xl font-bold text-primary">{formattedPrice}</p>
+              
+              <div className="mt-6 space-y-2">
+                {isOwner ? (
+                  <Button disabled className="w-full" size="lg">Este é o seu anúncio</Button>
+                ) : user ? (
+                  ad.profiles && (
+                    <>
+                      <SendMessageButton seller={ad.profiles} adId={ad.id} />
+                      <MakeOfferDialog adId={ad.id} sellerId={ad.profiles.id} adTitle={ad.title} />
+                    </>
+                  )
+                ) : (
+                  <Button asChild className="w-full" size="lg">
+                    <Link to="/login">
+                      <MessageCircle className="mr-2 h-5 w-5" />
+                      Faça login para contatar
+                    </Link>
+                  </Button>
+                )}
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2 mt-6">Descrição</h3>
+                <p className="text-muted-foreground whitespace-pre-wrap">{ad.description}</p>
+              </div>
+            </CardContent>
+            <div className="mt-6 border-t pt-4 space-y-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <UserCircle className="h-4 w-4" />
+                Vendido por:&nbsp;
+                <div className="flex items-center gap-1">
+                  {ad.profiles && ad.profiles.username ? (
+                    <Link to={`/loja/${ad.profiles.username}`} className="font-bold text-primary hover:underline">
+                      {ad.profiles.full_name}
+                    </Link>
+                  ) : (
+                    <strong className="font-bold">{ad.profiles?.full_name || 'Usuário anônimo'}</strong>
+                  )}
+                  {ad.profiles?.is_verified && (
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <BadgeCheck className="h-4 w-4 fill-teal-500 text-white" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Vendedor Verificado</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4" />
+                <span>Publicado em: {formattedDate}</span>
+              </div>
+              <div className="pt-2">
+                <ReportAdDialog adId={ad.id} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+export default AdDetails;
