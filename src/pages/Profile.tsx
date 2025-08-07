@@ -21,7 +21,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Advertisement } from "@/components/AdCard";
 import { Link, useSearchParams } from "react-router-dom";
-import { Trash2, Eye, CheckSquare, Pencil, RefreshCw, PauseCircle, PlayCircle, Star, Zap, Gem, ShieldCheck } from "lucide-react";
+import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Star, Zap, Gem, ShieldCheck } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +45,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { BuyCreditsDialog } from "@/components/BuyCreditsDialog";
 import VerificationTab from "@/components/VerificationTab";
 import { getOptimizedImageUrl } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const profileFormSchema = z.object({
   full_name: z.string().min(3, "O nome completo deve ter pelo menos 3 caracteres."),
@@ -139,6 +141,7 @@ const Profile = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreditsDialogOpen, setIsCreditsDialogOpen] = useState(false);
+  const isMobile = useIsMobile();
   
   const activeTab = searchParams.get("tab") || "my-ads";
 
@@ -269,23 +272,6 @@ const Profile = () => {
     }
   };
 
-  const handleRenewAd = async (ad: UserAd) => {
-    const toastId = showLoading("Renovando anúncio...");
-    try {
-      const { error } = await supabase.from("advertisements").update({ 
-        created_at: new Date().toISOString(),
-        last_renewed_at: new Date().toISOString()
-      }).eq("id", ad.id);
-      if (error) throw new Error(error.message);
-      dismissToast(toastId);
-      showSuccess("Anúncio renovado e no topo da lista!");
-      refetchAds();
-    } catch (error) {
-      dismissToast(toastId);
-      showError(error instanceof Error ? error.message : "Erro ao renovar anúncio.");
-    }
-  };
-
   const handleBoostAd = async (adId: string) => {
     const toastId = showLoading("Impulsionando anúncio...");
     try {
@@ -326,22 +312,39 @@ const Profile = () => {
     <>
     <div className="space-y-8">
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <ScrollArea className="w-full whitespace-nowrap">
-          <TabsList className="inline-flex">
-            <TabsTrigger value="my-ads">Meus Anúncios</TabsTrigger>
-            <TabsTrigger value="offers">Minhas Ofertas</TabsTrigger>
-            <TabsTrigger value="analytics">Desempenho</TabsTrigger>
-            <TabsTrigger value="favorites">Meus Favoritos</TabsTrigger>
-            <TabsTrigger value="reviews">Minhas Avaliações</TabsTrigger>
-            <TabsTrigger value="perfil">Perfil</TabsTrigger>
-            <TabsTrigger value="verification">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4" /> Verificação
-              </div>
-            </TabsTrigger>
-          </TabsList>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+        {isMobile ? (
+          <Select onValueChange={handleTabChange} value={activeTab}>
+            <SelectTrigger className="w-full text-base py-6">
+              <SelectValue placeholder="Selecione uma seção" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="my-ads">Meus Anúncios</SelectItem>
+              <SelectItem value="offers">Minhas Ofertas</SelectItem>
+              <SelectItem value="analytics">Desempenho</SelectItem>
+              <SelectItem value="favorites">Meus Favoritos</SelectItem>
+              <SelectItem value="reviews">Minhas Avaliações</SelectItem>
+              <SelectItem value="perfil">Perfil</SelectItem>
+              <SelectItem value="verification">Verificação</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <ScrollArea className="w-full whitespace-nowrap">
+            <TabsList className="inline-flex">
+              <TabsTrigger value="my-ads">Meus Anúncios</TabsTrigger>
+              <TabsTrigger value="offers">Minhas Ofertas</TabsTrigger>
+              <TabsTrigger value="analytics">Desempenho</TabsTrigger>
+              <TabsTrigger value="favorites">Meus Favoritos</TabsTrigger>
+              <TabsTrigger value="reviews">Minhas Avaliações</TabsTrigger>
+              <TabsTrigger value="perfil">Perfil</TabsTrigger>
+              <TabsTrigger value="verification">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" /> Verificação
+                </div>
+              </TabsTrigger>
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        )}
         
         <TabsContent value="my-ads">
           <Card>
@@ -371,21 +374,6 @@ const Profile = () => {
                 ) : userAds && userAds.length > 0 ? (
                   userAds.map((ad) => {
                     const now = new Date();
-                    const cooldownMs = 24 * 60 * 60 * 1000;
-
-                    let isRenewOnCooldown = false;
-                    let hoursLeft = 0;
-                    if (ad.last_renewed_at) {
-                        const lastRenewedDate = new Date(ad.last_renewed_at);
-                        if (isValid(lastRenewedDate)) {
-                            const timeDiff = now.getTime() - lastRenewedDate.getTime();
-                            if (timeDiff < cooldownMs) {
-                                isRenewOnCooldown = true;
-                                hoursLeft = Math.ceil((cooldownMs - timeDiff) / (1000 * 60 * 60));
-                            }
-                        }
-                    }
-
                     let isBoosted = false;
                     if (ad.boosted_until) {
                         const boostedUntilDate = new Date(ad.boosted_until);
@@ -447,16 +435,6 @@ const Profile = () => {
                                   </Link>
                                 </TooltipTrigger>
                                 <TooltipContent><p>Editar anúncio</p></TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div>
-                                    <Button variant="outline" size="icon" onClick={() => handleRenewAd(ad)} disabled={isRenewOnCooldown}>
-                                      <RefreshCw className="h-4 w-4 text-blue-600" />
-                                    </Button>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent><p>{isRenewOnCooldown ? `Aguarde ${hoursLeft}h para renovar` : "Renovar (volta ao topo)"}</p></TooltipContent>
                               </Tooltip>
                               {ad.status === 'approved' && (
                                 <Tooltip>

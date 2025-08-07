@@ -76,7 +76,7 @@ const Login = () => {
          <div className="relative z-10">
             <Link to="/" className="flex items-center justify-center space-x-2 mb-8">
                 <img src="/logo.png" alt="Trokazz Logo" className="h-12 w-auto" />
-                <span className="text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 text-transparent bg-clip-text">
+                <span className="text-4xl font-bold bg-gradient-to-r from-primary to-accent-gradient text-transparent bg-clip-text">
                 Trokazz
                 </span>
             </Link>
