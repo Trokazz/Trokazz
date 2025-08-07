@@ -21,7 +21,7 @@ const AdminSidebar = () => {
     <div className="flex h-full flex-col gap-2">
       <div className="flex h-16 items-center border-b px-6">
         <h2 className="font-bold text-lg">
-          Admin <span className="bg-gradient-to-r from-primary to-purple-600 text-transparent bg-clip-text">Trokazz</span>
+          Admin <span className="bg-gradient-to-r from-primary to-accent-gradient text-transparent bg-clip-text">Trokazz</span>
         </h2>
       </div>
       <div className="flex-1 overflow-auto py-2">

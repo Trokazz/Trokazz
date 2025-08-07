@@ -26,7 +26,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="w-full flex-1">
             <Link to="/admin">
               <h1 className="font-bold text-lg">
-                Admin <span className="bg-gradient-to-r from-primary to-purple-600 text-transparent bg-clip-text">Trokazz</span>
+                Admin <span className="bg-gradient-to-r from-primary to-accent-gradient text-transparent bg-clip-text">Trokazz</span>
               </h1>
             </Link>
           </div>

@@ -72,7 +72,7 @@ const AdStories = () => {
               to={isPlaceholder ? `/anuncios/categoria/${story.category_slug}` : `/anuncio/${story.id}`}
               className="group flex flex-col items-center gap-2 w-20 text-center"
             >
-              <div className="h-20 w-20 rounded-full p-1 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 transition-transform duration-300 group-hover:scale-105">
+              <div className="h-20 w-20 rounded-full p-1 bg-gradient-to-tr from-primary to-accent-gradient transition-transform duration-300 group-hover:scale-105">
                 <div className="h-full w-full bg-background rounded-full p-1">
                   <img
                     src={isPlaceholder ? story.image_urls[0] : getOptimizedImageUrl(story.image_urls[0], { width: 150, height: 150, resize: 'cover' }) || '/placeholder.svg'}

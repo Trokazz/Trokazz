@@ -15,6 +15,13 @@ const fetchCategories = async () => {
   return data;
 };
 
+const categoryIconMap: { [key: string]: React.ElementType } = {
+  'imoveis': Icons.Building2,
+  'para-sua-casa': Icons.Armchair,
+  'utilidade-publica': Icons.Siren,
+  'beleza': Icons.Wand2,
+};
+
 const MobileBottomNav = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,7 +88,7 @@ const MobileBottomNav = () => {
             <nav className="flex flex-col space-y-2">
               <SheetClose asChild>
                 <Link to="/novo-anuncio" className="flex items-center gap-3 rounded-lg px-3 py-2 text-lg font-medium text-primary transition-all hover:bg-muted">
-                  <Sparkles className="h-5 w-5" /> Anunciar Grátis
+                  <Sparkles className="h-6 w-6" /> Anunciar Grátis
                 </Link>
               </SheetClose>
               <div className="px-3 py-2">
@@ -89,17 +96,36 @@ const MobileBottomNav = () => {
                 <div className="space-y-1">
                   {isLoadingCategories && Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
                   {categories?.map((cat) => {
-                    const Icon = (Icons as any)[cat.icon] || Icons.HelpCircle;
+                    const Icon = categoryIconMap[cat.slug] || (Icons as any)[cat.icon] || Icons.HelpCircle;
                     return (
                       <SheetClose asChild key={cat.slug}>
                         <Link to={`/anuncios/categoria/${cat.slug}`} className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted">
-                          <Icon className="h-5 w-5" /> {cat.name}
+                          <Icon className="h-6 w-6" /> {cat.name}
                         </Link>
                       </SheetClose>
                     );
                   })}
                 </div>
               </div>
+            </nav>
+          </div>
+          <div className="mt-auto border-t pt-4">
+            <nav className="flex flex-col space-y-1">
+              <SheetClose asChild>
+                <Link to="/contato" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted">
+                  <Icons.LifeBuoy className="h-5 w-5" /> Contato e Suporte
+                </Link>
+              </SheetClose>
+              <SheetClose asChild>
+                <Link to="/termos-de-servico" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted">
+                  <Icons.FileText className="h-5 w-5" /> Termos de Serviço
+                </Link>
+              </SheetClose>
+              <SheetClose asChild>
+                <Link to="/politica-de-privacidade" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted">
+                  <Icons.Shield className="h-5 w-5" /> Política de Privacidade
+                </Link>
+              </SheetClose>
             </nav>
           </div>
         </SheetContent>

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Search, MessagesSquare, Megaphone } from "lucide-react";
+import { Sparkles, Search, MessagesSquare, Rss } from "lucide-react";
 import { useSession } from "@/contexts/SessionContext";
 import {
   DropdownMenu,
@@ -85,7 +85,7 @@ const Header = () => {
         <div className="flex items-center space-x-4">
           <Link to="/" className="flex items-center space-x-2">
             <img src="/logo.png" alt="Trokazz Logo" className="h-10 w-auto" />
-            <span className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-600 text-transparent bg-clip-text">
+            <span className="text-3xl font-bold bg-gradient-to-r from-primary to-accent-gradient text-transparent bg-clip-text">
               Trokazz
             </span>
           </Link>
@@ -109,7 +109,7 @@ const Header = () => {
             <TooltipTrigger asChild>
               <Button asChild variant="ghost" size="icon">
                 <Link to="/procurados">
-                  <Megaphone className="h-5 w-5" />
+                  <Rss className="h-6 w-6" />
                   <span className="sr-only">Procurados</span>
                 </Link>
               </Button>

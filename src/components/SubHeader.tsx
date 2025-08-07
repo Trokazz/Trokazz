@@ -14,9 +14,16 @@ const fetchCategories = async () => {
   return data;
 };
 
-// Mapeamento de cores para cada categoria
+const categoryIconMap: { [key: string]: React.ElementType } = {
+  'imoveis': Icons.Building2,
+  'para-sua-casa': Icons.Armchair,
+  'utilidade-publica': Icons.Siren,
+  'beleza': Icons.Wand2,
+};
+
 const categoryStyles: { [key: string]: { bg: string; text: string; hoverBg: string } } = {
   'agro-e-industria':       { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-700 dark:text-green-300', hoverBg: 'hover:bg-green-200 dark:hover:bg-green-800/50' },
+  'beleza':                 { bg: 'bg-rose-100 dark:bg-rose-900/50', text: 'text-rose-700 dark:text-rose-300', hoverBg: 'hover:bg-rose-200 dark:hover:bg-rose-800/50' },
   'doacao-e-ajuda':         { bg: 'bg-pink-100 dark:bg-pink-900/50', text: 'text-pink-700 dark:text-pink-300', hoverBg: 'hover:bg-pink-200 dark:hover:bg-pink-800/50' },
   'eletronicos-e-celulares':{ bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-700 dark:text-blue-300', hoverBg: 'hover:bg-blue-200 dark:hover:bg-blue-800/50' },
   'gastronomia':            { bg: 'bg-orange-100 dark:bg-orange-900/50', text: 'text-orange-700 dark:text-orange-300', hoverBg: 'hover:bg-orange-200 dark:hover:bg-orange-800/50' },
@@ -47,7 +54,7 @@ const SubHeader = () => {
               </div>
             ))}
             {categories?.map((cat: Category) => {
-              const Icon = (Icons as any)[cat.icon] || Icons.HelpCircle;
+              const Icon = categoryIconMap[cat.slug] || (Icons as any)[cat.icon] || Icons.HelpCircle;
               const styles = categoryStyles[cat.slug] || categoryStyles.default;
               return (
                 <Link
