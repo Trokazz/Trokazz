@@ -37,6 +37,7 @@ import TermsOfService from "@/pages/TermsOfService";
 import Contact from "@/pages/Contact";
 import ModerationCenter from "@/pages/admin/ModerationCenter";
 import ManagePages from "@/pages/admin/ManagePages";
+import ManageCreditPackages from "@/pages/admin/ManageCreditPackages";
 import "@/globals.css";
 
 const router = createBrowserRouter([
@@ -107,6 +108,7 @@ const router = createBrowserRouter([
       { path: "categories", element: <ManageCategories /> },
       { path: "banners", element: <ManageBanners /> },
       { path: "pages", element: <ManagePages /> },
+      { path: "credits", element: <ManageCreditPackages /> },
       { path: "settings", element: <SiteSettings /> },
     ],
   },
