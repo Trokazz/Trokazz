@@ -12,9 +12,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { showError, showLoading, dismissToast } from "@/utils/toast";
 import { Gem, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { type Stripe, loadStripe } from '@stripe/stripe-js';
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "./ui/skeleton";
+
+// Declara o objeto Stripe no escopo global para o TypeScript
+declare global {
+  interface Window {
+    Stripe: any;
+  }
+}
 
 interface BuyCreditsDialogProps {
   isOpen: boolean;
@@ -38,14 +44,6 @@ const fetchCreditPackages = async (): Promise<CreditPackage[]> => {
   return data;
 };
 
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-let stripePromise: Promise<Stripe | null> | null = null;
-if (stripePublishableKey) {
-  stripePromise = loadStripe(stripePublishableKey);
-} else {
-  console.error("ALERTA: A variável de ambiente VITE_STRIPE_PUBLISHABLE_KEY não está configurada.");
-}
-
 export const BuyCreditsDialog = ({ isOpen, onOpenChange }: BuyCreditsDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,7 +53,8 @@ export const BuyCreditsDialog = ({ isOpen, onOpenChange }: BuyCreditsDialogProps
   });
 
   const handlePurchase = async (selectedPackage: CreditPackage) => {
-    if (!selectedPackage || !stripePromise) {
+    const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+    if (!window.Stripe || !stripePublishableKey) {
       showError("A integração de pagamento não está configurada corretamente.");
       return;
     }
@@ -75,9 +74,7 @@ export const BuyCreditsDialog = ({ isOpen, onOpenChange }: BuyCreditsDialogProps
       if (error) throw error;
       if (!data || !data.sessionId) throw new Error("ID da sessão de checkout inválido.");
 
-      const stripe = await stripePromise;
-      if (!stripe) throw new Error("Stripe.js não foi carregado.");
-
+      const stripe = window.Stripe(stripePublishableKey);
       dismissToast(toastId);
       const { error: stripeError } = await stripe.redirectToCheckout({ sessionId: data.sessionId });
       if (stripeError) throw new Error(stripeError.message);
