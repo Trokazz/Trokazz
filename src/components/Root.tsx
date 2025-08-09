@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Header from "./Header";
 import SubHeader from "./SubHeader";
 import { Outlet, Link } from "react-router-dom";
@@ -9,7 +10,7 @@ import { Skeleton } from "./ui/skeleton";
 import { useState, useEffect } from "react";
 import { OnboardingDialog } from "./OnboardingDialog";
 import MobileBottomNav from "./MobileBottomNav";
-import Analytics from "./Analytics";
+import PageSkeleton from "./PageSkeleton";
 
 const fetchSiteSettings = async () => {
   const { data, error } = await supabase.from("site_settings").select("key, value");
@@ -37,7 +38,6 @@ const fetchProfile = async (userId: string | undefined) => {
 const Root = () => {
   const { user, loading: sessionLoading } = useSession();
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-  const gaMeasurementId = import.meta.env.VITE_GA_MEASUREMENT_ID;
 
   const { data: settings, isLoading: isLoadingSettings } = useQuery({
     queryKey: ["siteSettings"],
@@ -75,11 +75,12 @@ const Root = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {gaMeasurementId && <Analytics measurementId={gaMeasurementId} />}
       <Header />
       <SubHeader />
       <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8">
-        <Outlet />
+        <Suspense fallback={<PageSkeleton />}>
+          <Outlet />
+        </Suspense>
       </main>
       <footer className="bg-card border-t py-6 hidden md:block">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
