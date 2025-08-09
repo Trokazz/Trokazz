@@ -1,6 +1,13 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
+// Declara a função gtag no escopo global para que o TypeScript a reconheça.
+declare global {
+  interface Window {
+    gtag: (...args: any[]) => void;
+  }
+}
+
 interface AnalyticsProps {
   measurementId?: string;
 }

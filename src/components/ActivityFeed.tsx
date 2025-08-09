@@ -1,28 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import * as Icons from "lucide-react";
 import { safeFormatDistanceToNow } from "@/lib/utils";
 
-const fetchActivityFeed = async () => {
-  const { data, error } = await supabase
-    .from("activity_feed")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(15);
-  if (error) throw error;
-  return data;
+type Activity = {
+  id: number;
+  icon: string | null;
+  message: string;
+  link: string | null;
+  created_at: string;
 };
 
-const ActivityFeed = () => {
-  const { data: activities, isLoading } = useQuery({
-    queryKey: ["activityFeed"],
-    queryFn: fetchActivityFeed,
-    refetchInterval: 60000, // Atualiza a cada minuto
-  });
+interface ActivityFeedProps {
+  activities: Activity[] | null | undefined;
+  isLoading: boolean;
+}
 
+const ActivityFeed = ({ activities, isLoading }: ActivityFeedProps) => {
   const renderIcon = (iconName: string | null) => {
     if (!iconName) return <Icons.Zap className="h-5 w-5 text-muted-foreground" />;
     const Icon = (Icons as any)[iconName] || Icons.Zap;

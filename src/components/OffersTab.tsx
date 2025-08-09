@@ -29,7 +29,7 @@ const fetchOffers = async (userId: string): Promise<OfferWithDetails[]> => {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data as OfferWithDetails[];
+  return data as unknown as OfferWithDetails[];
 };
 
 const OffersTab = () => {
