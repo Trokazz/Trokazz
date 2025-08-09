@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { showError, showLoading, dismissToast } from "@/utils/toast";
 import { Gem, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { loadStripe } from '@stripe/stripe-js';
+import { type Stripe, loadStripe } from '@stripe/stripe-js';
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "./ui/skeleton";
 
@@ -39,9 +39,10 @@ const fetchCreditPackages = async (): Promise<CreditPackage[]> => {
 };
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
-
-if (!stripePublishableKey) {
+let stripePromise: Promise<Stripe | null> | null = null;
+if (stripePublishableKey) {
+  stripePromise = loadStripe(stripePublishableKey);
+} else {
   console.error("ALERTA: A variável de ambiente VITE_STRIPE_PUBLISHABLE_KEY não está configurada.");
 }
 
