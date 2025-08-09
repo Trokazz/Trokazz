@@ -19,7 +19,6 @@ import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Advertisement } from "@/components/AdCard";
 import { Link, useSearchParams } from "react-router-dom";
 import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Star, Zap, Gem, ShieldCheck } from "lucide-react";
 import {
@@ -47,6 +46,7 @@ import VerificationTab from "@/components/VerificationTab";
 import { getOptimizedImageUrl } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ProfilePageData, Advertisement, ReviewWithReviewer } from "@/types/database";
 
 const profileFormSchema = z.object({
   full_name: z.string().min(3, "O nome completo deve ter pelo menos 3 caracteres."),
@@ -63,76 +63,18 @@ const profileFormSchema = z.object({
 
 type UserAd = Advertisement & { status: string; view_count: number; last_renewed_at: string | null; boosted_until: string | null };
 
-const fetchUserAds = async (userId: string) => {
-  const { data, error } = await supabase
-    .from("advertisements")
-    .select("*, view_count, last_renewed_at, boosted_until")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
+const fetchProfilePageData = async (userId: string): Promise<ProfilePageData> => {
+  const { data, error } = await supabase.rpc('get_profile_page_data', { p_user_id: userId });
   if (error) throw new Error(error.message);
-  return data as UserAd[];
-};
+  if (!data) throw new Error("Dados do perfil não encontrados.");
 
-const fetchUserProfile = async (userId: string) => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-  if (error) throw new Error(error.message);
-  return data;
-};
-
-const fetchReviews = async (sellerId: string) => {
-    const { data: rawReviews, error } = await supabase
-        .from('reviews')
-        .select('*')
-        .eq('seller_id', sellerId)
-        .order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-
-    if (!rawReviews || rawReviews.length === 0) {
-      return [];
-    }
-
-    const reviewerIds = [...new Set(rawReviews.map(r => r.reviewer_id))];
-    const { data: reviewersData, error: reviewersError } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", reviewerIds);
-
-    if (reviewersError) {
-      console.error("Failed to fetch reviewers", reviewersError);
-      return rawReviews.map(r => ({ ...r, reviewer: null }));
-    }
-
-    return rawReviews.map(review => ({
-      ...review,
-      reviewer: reviewersData.find(p => p.id === review.reviewer_id) || null
-    }));
-}
-
-const fetchSiteSettings = async () => {
-  const { data, error } = await supabase.from("site_settings").select("key, value");
-  if (error) throw new Error(error.message);
-  return data.reduce((acc, { key, value }) => {
-    acc[key] = value;
-    return acc;
-  }, {} as { [key: string]: any });
-};
-
-const fetchUserCredits = async (userId: string) => {
-  const { data, error } = await supabase
-    .from("user_credits")
-    .select("balance")
-    .eq("user_id", userId)
-    .single();
-  if (error) {
-    if (error.code === 'PGRST116') return { balance: 0 };
-    throw new Error(error.message);
-  }
-  return data || { balance: 0 };
+  // Garante que os arrays e objetos aninhados não sejam nulos
+  data.ads = data.ads || [];
+  data.reviews = data.reviews || [];
+  data.credits = data.credits || { balance: 0 };
+  data.settings = data.settings || {};
+  
+  return data as ProfilePageData;
 };
 
 const Profile = () => {
@@ -145,40 +87,19 @@ const Profile = () => {
   
   const activeTab = searchParams.get("tab") || "my-ads";
 
-  const { data: settings } = useQuery({
-    queryKey: ["siteSettings"],
-    queryFn: fetchSiteSettings,
-  });
-
-  const { data: credits, isLoading: isLoadingCredits } = useQuery({
-    queryKey: ["userCredits", session?.user?.id],
-    queryFn: () => fetchUserCredits(session!.user!.id),
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["profilePageData", session?.user?.id],
+    queryFn: () => fetchProfilePageData(session!.user!.id),
     enabled: !!session?.user?.id,
   });
+
+  const { profile, ads: userAds, reviews, credits, settings } = data || {};
 
   const handleTabChange = (value: string) => {
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("tab", value);
     setSearchParams(newSearchParams, { replace: true });
   };
-
-  const { data: userAds, refetch: refetchAds, isLoading: isLoadingAds } = useQuery({
-    queryKey: ["userAds", session?.user?.id],
-    queryFn: () => fetchUserAds(session!.user!.id),
-    enabled: !!session?.user?.id,
-  });
-
-  const { data: profile, refetch: refetchProfile, isLoading: isLoadingProfile } = useQuery({
-    queryKey: ["userProfile", session?.user?.id],
-    queryFn: () => fetchUserProfile(session!.user!.id),
-    enabled: !!session?.user?.id,
-  });
-
-  const { data: reviews, isLoading: isLoadingReviews } = useQuery({
-      queryKey: ['reviews', session?.user?.id],
-      queryFn: () => fetchReviews(session!.user!.id),
-      enabled: !!session?.user?.id,
-  });
 
   const profileForm = useForm<z.infer<typeof profileFormSchema>>({
     resolver: zodResolver(profileFormSchema),
@@ -228,7 +149,7 @@ const Profile = () => {
         throw new Error(updateError.message);
       }
 
-      await refetchProfile();
+      await refetch();
       queryClient.invalidateQueries({ queryKey: ["headerProfile", session?.user?.id] });
       dismissToast(toastId);
       showSuccess("Perfil atualizado com sucesso!");
@@ -251,7 +172,7 @@ const Profile = () => {
       if (error) throw new Error(error.message);
       dismissToast(toastId);
       showSuccess("Anúncio excluído com sucesso!");
-      refetchAds();
+      refetch();
     } catch (error) {
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Erro ao excluir anúncio.");
@@ -265,7 +186,7 @@ const Profile = () => {
       if (error) throw new Error(error.message);
       dismissToast(toastId);
       showSuccess("Anúncio atualizado!");
-      refetchAds();
+      refetch();
     } catch (error) {
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Erro ao atualizar anúncio.");
@@ -280,8 +201,7 @@ const Profile = () => {
 
       dismissToast(toastId);
       showSuccess(`Anúncio impulsionado com sucesso!`);
-      refetchAds();
-      queryClient.invalidateQueries({ queryKey: ["userCredits", session?.user?.id] });
+      refetch();
     } catch (error) {
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Erro ao impulsionar anúncio.");
@@ -299,7 +219,7 @@ const Profile = () => {
     }
   };
 
-  if (isLoadingProfile) {
+  if (isLoading) {
     return (
       <div className="space-y-8">
         <Skeleton className="h-64 w-full" />
@@ -357,7 +277,7 @@ const Profile = () => {
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 text-lg font-semibold text-primary">
                     <Gem className="h-5 w-5" />
-                    {isLoadingCredits ? <Skeleton className="h-5 w-8" /> : <span>{credits?.balance}</span>}
+                    <span>{credits?.balance || 0}</span>
                     <span className="text-sm font-medium text-muted-foreground">Créditos</span>
                   </div>
                   <Button onClick={() => setIsCreditsDialogOpen(true)}>Comprar Créditos</Button>
@@ -366,12 +286,7 @@ const Profile = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {isLoadingAds ? (
-                  <div className="space-y-4">
-                    <Skeleton className="h-24 w-full rounded-lg" />
-                    <Skeleton className="h-24 w-full rounded-lg" />
-                  </div>
-                ) : userAds && userAds.length > 0 ? (
+                {userAds && userAds.length > 0 ? (
                   userAds.map((ad) => {
                     const now = new Date();
                     let isBoosted = false;
@@ -417,7 +332,7 @@ const Profile = () => {
                                     <AlertDialogTitle>Impulsionar Anúncio</AlertDialogTitle>
                                     <AlertDialogDescription>
                                       Seu anúncio será exibido com destaque por {settings?.boost_duration_days || 7} dias.
-                                      Isso custará {boostCost} créditos. Você tem {credits?.balance} créditos.
+                                      Isso custará {boostCost} créditos. Você tem {credits?.balance || 0} créditos.
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
@@ -524,9 +439,9 @@ const Profile = () => {
                     <CardDescription>O que outros usuários dizem sobre você.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isLoadingReviews ? <p>Carregando avaliações...</p> : reviews && reviews.length > 0 ? (
+                    {reviews && reviews.length > 0 ? (
                         <div className="space-y-4">
-                            {reviews.map((review: any) => (
+                            {reviews.map((review: ReviewWithReviewer) => (
                                 <div key={review.id} className="border-b pb-4">
                                     <div className="flex items-center gap-2">
                                         <div className="flex">

@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useForm, Controller } from "react-hook-form";
 import { useEffect, useMemo } from "react";
 import ConnectedServices from "@/components/ConnectedServices";
+import ErrorState from "@/components/ErrorState";
 
 const ADS_PER_PAGE = 12;
 
@@ -103,7 +104,7 @@ const AdsList = () => {
     enabled: !!filters.categorySlug,
   });
 
-  const { data, isLoading: isLoadingAds, error } = useQuery({
+  const { data, isLoading: isLoadingAds, isError, error, refetch } = useQuery({
     queryKey: ["filteredAds", filters, categoryData],
     queryFn: () => fetchFilteredAds({ ...filters, categoryData }),
     enabled: !isLoadingCategoryData,
@@ -219,9 +220,9 @@ const AdsList = () => {
 
       <section>
         {isLoading && (<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{Array.from({ length: 8 }).map((_, i) => (<div key={i} className="space-y-2"><Skeleton className="h-48 w-full" /><Skeleton className="h-6 w-3/4" /><Skeleton className="h-6 w-1/2" /></div>))}</div>)}
-        {error && (<div className="text-center py-10"><p className="text-red-500">Ocorreu um erro ao carregar os anúncios.</p></div>)}
-        {!isLoading && !error && data?.ads && data.ads.length > 0 && (<><div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{data.ads.map((ad) => (<AdCard key={ad.id} ad={ad} isInitiallyFavorited={favoriteIds?.includes(ad.id)} />))}</div><PaginationControls currentPage={filters.page} totalPages={totalPages} /></>)}
-        {!isLoading && !error && data?.ads && data.ads.length === 0 && (<div className="text-center py-10"><p className="text-gray-500">Nenhum anúncio encontrado para estes filtros.</p></div>)}
+        {isError && (<ErrorState message={error.message} onRetry={() => refetch()} />)}
+        {!isLoading && !isError && data?.ads && data.ads.length > 0 && (<><div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{data.ads.map((ad) => (<AdCard key={ad.id} ad={ad} isInitiallyFavorited={favoriteIds?.includes(ad.id)} />))}</div><PaginationControls currentPage={filters.page} totalPages={totalPages} /></>)}
+        {!isLoading && !isError && data?.ads && data.ads.length === 0 && (<div className="text-center py-10"><p className="text-gray-500">Nenhum anúncio encontrado para estes filtros.</p></div>)}
       </section>
     </div>
   );

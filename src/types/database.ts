@@ -2,25 +2,49 @@
 
 export type Profile = {
   id: string;
+  created_at: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  phone: string | null;
+  role: 'user' | 'admin' | null;
   username: string | null;
-  is_verified?: boolean;
-  role?: 'user' | 'admin';
-  // Adicione outros campos do perfil conforme necessário
+  is_verified: boolean | null;
+  store_type: string | null;
+  store_banner_url: string | null;
+  address: string | null;
+  operating_hours: string | null;
+  is_open: boolean | null;
+  status: 'active' | 'suspended';
+  service_tags: string[] | null;
+  badges?: ReputationBadgeType[];
 };
 
 export type Advertisement = {
   id: string;
+  created_at: string;
   title: string;
+  description: string | null;
   price: number;
   image_urls: string[];
-  created_at: string;
-  boosted_until?: string | null;
-  // Adicione outros campos do anúncio conforme necessário
+  user_id: string;
+  category_slug: string | null;
+  status: 'pending_approval' | 'approved' | 'rejected' | 'sold' | 'paused';
+  view_count: number;
+  boosted_until: string | null;
+  last_renewed_at: string | null;
+  metadata: any | null;
+  latitude: number | null;
+  longitude: number | null;
+  flag_reason: string | null;
+  profiles?: { full_name: string | null };
 };
 
-// Tipos complexos para queries com joins
+export type ReputationBadgeType = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+};
 
 export type ConversationWithDetails = {
   id: string;
@@ -70,9 +94,17 @@ export type ReviewWithReviewer = {
 export type UserDetailsData = {
   profile: Profile;
   ads: Advertisement[];
-  reportsAgainstUser: any[]; // Manter como 'any' por enquanto devido à complexidade
+  reportsAgainstUser: any[];
   offers: OfferWithDetails[];
   conversations: ConversationWithDetails[];
-  favorites: any[]; // Manter como 'any' por enquanto
-  violations: any[]; // Manter como 'any' por enquanto
+  favorites: any[];
+  violations: any[];
+};
+
+export type ProfilePageData = {
+  profile: Profile;
+  ads: (Advertisement & { view_count: number; last_renewed_at: string | null; boosted_until: string | null })[];
+  reviews: ReviewWithReviewer[];
+  credits: { balance: number } | null;
+  settings: { boost_price?: string; boost_duration_days?: string; } | null;
 };
