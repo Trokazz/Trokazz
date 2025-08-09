@@ -24,7 +24,7 @@ import { useEffect } from "react";
 const settingsSchema = z.object({
   maintenance_mode: z.boolean().default(false),
   welcome_message: z.string().optional(),
-  boost_price: z.coerce.number().min(0, "O preço deve ser positivo.").default(10),
+  boost_price: z.coerce.number().min(0, "O preço deve ser positivo.").default(25),
   boost_duration_days: z.coerce.number().int().min(1, "A duração deve ser de pelo menos 1 dia.").default(7),
 });
 
@@ -42,7 +42,7 @@ const fetchSettings = async (): Promise<SettingsData> => {
   return {
     maintenance_mode: settings.maintenance_mode === 'true',
     welcome_message: settings.welcome_message || "",
-    boost_price: settings.boost_price ? parseFloat(settings.boost_price) : 10,
+    boost_price: settings.boost_price ? parseFloat(settings.boost_price) : 25,
     boost_duration_days: settings.boost_duration_days ? parseInt(settings.boost_duration_days, 10) : 7,
   };
 };
@@ -59,7 +59,7 @@ const SiteSettings = () => {
     defaultValues: {
       maintenance_mode: false,
       welcome_message: "",
-      boost_price: 10,
+      boost_price: 25,
       boost_duration_days: 7,
     },
   });

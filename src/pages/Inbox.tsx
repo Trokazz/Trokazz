@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { safeFormatDistanceToNow } from "@/lib/utils";
+import { ConversationWithDetails } from "@/types/database";
 
-const fetchConversations = async (userId: string) => {
+const fetchConversations = async (userId: string): Promise<ConversationWithDetails[]> => {
   const { data, error } = await supabase
     .from("conversations")
     .select(`
@@ -24,13 +25,12 @@ const fetchConversations = async (userId: string) => {
     .limit(1, { foreignTable: "messages" });
 
   if (error) throw error;
-  return data;
+  return data as ConversationWithDetails[];
 };
 
 const Inbox = () => {
   const { user } = useSession();
-  // Tipando explicitamente os dados como `any[]` para contornar a inferência incorreta de tipos em tabelas unidas.
-  const { data: conversations, isLoading } = useQuery<any[]>({
+  const { data: conversations, isLoading } = useQuery<ConversationWithDetails[]>({
     queryKey: ["conversations", user?.id],
     queryFn: () => fetchConversations(user!.id),
     enabled: !!user,

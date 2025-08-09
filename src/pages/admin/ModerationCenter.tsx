@@ -125,15 +125,32 @@ const ModerationCenter = () => {
   const handleVerificationAction = async (requestId: string, status: 'approved' | 'rejected', reason?: string) => {
     const toastId = showLoading("Processando solicitação...");
     try {
+      const requestItem = queue?.find(item => item.type === 'verification' && item.data.id === requestId);
+      if (!requestItem) throw new Error("Solicitação não encontrada na fila.");
+      const request = requestItem.data as VerificationRequest;
+
       const { error: requestError } = await supabase.from("verification_requests").update({ status, rejection_reason: reason, reviewed_at: new Date().toISOString(), reviewed_by: adminUser?.id }).eq("id", requestId);
       if (requestError) throw requestError;
+
       if (status === 'approved') {
-        const request = queue?.find(item => item.type === 'verification' && item.data.id === requestId)?.data as VerificationRequest;
-        if (request) {
-          const { error: profileError } = await supabase.from("profiles").update({ is_verified: true }).eq("id", request.user_id);
-          if (profileError) throw profileError;
-        }
+        const { error: profileError } = await supabase.from("profiles").update({ is_verified: true }).eq("id", request.user_id);
+        if (profileError) throw profileError;
+        
+        await supabase.from('notifications').insert({
+            user_id: request.user_id,
+            type: 'verification_approved',
+            message: 'Sua verificação de identidade foi aprovada! Você agora é um vendedor verificado.',
+            link: '/perfil?tab=verification'
+        });
+      } else {
+        await supabase.from('notifications').insert({
+            user_id: request.user_id,
+            type: 'verification_rejected',
+            message: `Sua verificação não foi aprovada. Motivo: ${reason || 'Não especificado'}. Por favor, tente novamente.`,
+            link: '/perfil?tab=verification'
+        });
       }
+
       dismissToast(toastId);
       showSuccess(`Solicitação ${status === 'approved' ? 'aprovada' : 'rejeitada'}.`);
       queryClient.invalidateQueries({ queryKey: ["moderationQueue"] });

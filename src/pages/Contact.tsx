@@ -15,8 +15,8 @@ const Contact = () => {
           <Mail className="h-6 w-6 text-primary" />
           <div>
             <h3 className="font-semibold">E-mail</h3>
-            <a href="mailto:contato@trokazz.com" className="text-muted-foreground hover:text-primary">
-              contato@trokazz.com
+            <a href="mailto:contato@trokazz.com.br" className="text-muted-foreground hover:text-primary">
+              contato@trokazz.com.br
             </a>
           </div>
         </div>

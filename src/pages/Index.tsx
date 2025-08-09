@@ -108,7 +108,7 @@ const Index = () => {
   const sectionTitle = showFallback ? "Destaques Recentes" : "Oportunidades Perto de Você";
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8">
       <AdStories />
       <PromoBanner />
 

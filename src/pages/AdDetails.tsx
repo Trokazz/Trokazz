@@ -13,6 +13,7 @@ import { useSession } from "@/contexts/SessionContext";
 import SendMessageButton from "@/components/SendMessageButton";
 import MakeOfferDialog from "@/components/MakeOfferDialog";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
+import ShareButtons from "@/components/ShareButtons";
 
 const fetchAdDetails = async (id: string) => {
   const { data, error } = await supabase
@@ -33,6 +34,7 @@ const fetchAdDetails = async (id: string) => {
 const AdDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useSession();
+  const adUrl = window.location.href;
 
   useEffect(() => {
     if (id) {
@@ -158,6 +160,8 @@ const AdDetails = () => {
                 <h3 className="font-semibold mb-2 mt-6">Descrição</h3>
                 <p className="text-muted-foreground whitespace-pre-wrap">{ad.description}</p>
               </div>
+
+              <ShareButtons title={ad.title} url={adUrl} />
             </CardContent>
             <div className="mt-6 border-t pt-4 space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
