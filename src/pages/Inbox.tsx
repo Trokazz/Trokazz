@@ -25,7 +25,7 @@ const fetchConversations = async (userId: string): Promise<ConversationWithDetai
     .limit(1, { foreignTable: "messages" });
 
   if (error) throw error;
-  return data as ConversationWithDetails[];
+  return data as unknown as ConversationWithDetails[];
 };
 
 const Inbox = () => {

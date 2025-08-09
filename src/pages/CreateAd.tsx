@@ -108,6 +108,7 @@ const CreateAd = () => {
 
     setIsSubmitting(true);
     const toastId = showLoading("Publicando seu anúncio...");
+    const uploadedImagePaths: string[] = [];
 
     try {
       const imageFiles = values.images;
@@ -117,6 +118,8 @@ const CreateAd = () => {
         const fileName = `${user.id}/${Date.now()}-${imageFile.name}`;
         const { error: uploadError } = await supabase.storage.from("advertisements").upload(fileName, imageFile);
         if (uploadError) throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
+        
+        uploadedImagePaths.push(fileName);
         const { data: { publicUrl } } = supabase.storage.from("advertisements").getPublicUrl(fileName);
         imageUrls.push(publicUrl);
       }
@@ -151,6 +154,10 @@ const CreateAd = () => {
       showSuccess("Anúncio enviado para revisão!");
       navigate(`/perfil`);
     } catch (error) {
+      // Se algo der errado, remove as imagens que já foram enviadas.
+      if (uploadedImagePaths.length > 0) {
+        await supabase.storage.from("advertisements").remove(uploadedImagePaths);
+      }
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido.");
     } finally {

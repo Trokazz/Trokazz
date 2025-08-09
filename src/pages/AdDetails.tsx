@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import SendMessageButton from "@/components/SendMessageButton";
 import MakeOfferDialog from "@/components/MakeOfferDialog";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
 import ShareButtons from "@/components/ShareButtons";
+import ErrorState from "@/components/ErrorState";
 
 const fetchAdDetails = async (id: string) => {
   const { data, error } = await supabase
@@ -34,6 +35,7 @@ const fetchAdDetails = async (id: string) => {
 const AdDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useSession();
+  const queryClient = useQueryClient();
   const adUrl = window.location.href;
 
   useEffect(() => {
@@ -45,7 +47,7 @@ const AdDetails = () => {
     }
   }, [id]);
 
-  const { data: ad, isLoading, isError, error } = useQuery({
+  const { data: ad, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["adDetails", id],
     queryFn: () => fetchAdDetails(id!),
     enabled: !!id,
@@ -74,16 +76,7 @@ const AdDetails = () => {
   }
 
   if (isError) {
-    return (
-      <div className="text-center py-10">
-        <h2 className="text-xl font-semibold text-red-600">Oops! Algo deu errado.</h2>
-        <p className="text-muted-foreground mt-2">Não foi possível carregar os detalhes do anúncio.</p>
-        <pre className="text-xs text-muted-foreground mt-2">{error.message}</pre>
-        <Button asChild variant="outline" className="mt-4">
-          <Link to="/">Voltar para a página inicial</Link>
-        </Button>
-      </div>
-    );
+    return <ErrorState message={error.message} onRetry={() => refetch()} />;
   }
 
   if (!ad) {
