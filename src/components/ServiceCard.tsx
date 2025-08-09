@@ -37,6 +37,7 @@ const ServiceCard = ({ service }: ServiceCardProps) => {
             src={getOptimizedImageUrl(service.image_url, { width: 400, height: 400 }) || '/placeholder.svg'}
             alt={service.title}
             className="w-full h-48 object-cover"
+            loading="lazy"
           />
         </CardHeader>
         <CardContent className="p-4 flex-grow">
