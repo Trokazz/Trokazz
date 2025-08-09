@@ -24,7 +24,33 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
     getInitialSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (_event, session) => {
+        if (_event === 'SIGNED_IN' && session) {
+          try {
+            // Verifica se o perfil do usuário é novo (ou seja, ainda não tem um nome completo)
+            const { data: profile, error } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', session.user.id)
+              .single();
+
+            if (error && error.code !== 'PGRST116') {
+              console.error("Erro ao buscar perfil para e-mail de boas-vindas:", error);
+            }
+
+            // Se o perfil existe mas não tem nome, é um novo usuário.
+            // O perfil é criado automaticamente por um gatilho no cadastro.
+            if (profile && profile.full_name === null) {
+              // Invoca a função de servidor para enviar o e-mail.
+              // É uma operação "dispare e esqueça" do ponto de vista do cliente.
+              supabase.functions.invoke('send-welcome-email').catch(err => {
+                console.error("Falha ao invocar a função de e-mail de boas-vindas:", err);
+              });
+            }
+          } catch (e) {
+            console.error("Erro na lógica de mudança de estado de autenticação (SIGNED_IN):", e);
+          }
+        }
         setSession(session);
       }
     );

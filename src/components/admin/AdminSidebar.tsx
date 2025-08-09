@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Newspaper, Users, Shapes, Settings, BarChartHorizontal, Image as ImageIcon, FileSearch, Briefcase, Shield, FileText } from "lucide-react";
+import { LayoutDashboard, Newspaper, Users, Shapes, Settings, BarChartHorizontal, Image as ImageIcon, FileSearch, Briefcase, Shield, FileText, Gem } from "lucide-react";
 
 const AdminSidebar = () => {
   const navItems = [
@@ -14,6 +14,7 @@ const AdminSidebar = () => {
     { href: "/admin/categories", label: "Categorias", icon: Shapes },
     { href: "/admin/banners", label: "Banners", icon: ImageIcon },
     { href: "/admin/pages", label: "Gerenciar Páginas", icon: FileText },
+    { href: "/admin/credits", label: "Pacotes de Créditos", icon: Gem },
     { href: "/admin/settings", label: "Configurações", icon: Settings },
   ];
 

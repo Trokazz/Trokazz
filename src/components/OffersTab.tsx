@@ -11,8 +11,9 @@ import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast
 import { Check, X } from "lucide-react";
 import { useEffect } from "react";
 import { safeFormatDistanceToNow } from "@/lib/utils";
+import { OfferWithDetails } from "@/types/database";
 
-const fetchOffers = async (userId: string) => {
+const fetchOffers = async (userId: string): Promise<OfferWithDetails[]> => {
   const { data, error } = await supabase
     .from('offers')
     .select(`
@@ -28,14 +29,13 @@ const fetchOffers = async (userId: string) => {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+  return data as OfferWithDetails[];
 };
 
 const OffersTab = () => {
   const { user } = useSession();
   const queryClient = useQueryClient();
-  // Tipando explicitamente os dados como `any[]` para contornar a inferência incorreta de tipos em tabelas unidas.
-  const { data: offers, isLoading } = useQuery<any[]>({
+  const { data: offers, isLoading } = useQuery<OfferWithDetails[]>({
     queryKey: ["userOffers", user?.id],
     queryFn: () => fetchOffers(user!.id),
     enabled: !!user,
@@ -101,7 +101,7 @@ const OffersTab = () => {
         <CardContent className="space-y-4">
           {isLoading && <Skeleton className="h-24 w-full" />}
           {receivedOffers?.length === 0 && <p className="text-muted-foreground text-center py-4">Nenhuma oferta recebida.</p>}
-          {receivedOffers?.map((offer: any) => (
+          {receivedOffers?.map((offer) => (
             <div key={offer.id} className="p-3 border rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
@@ -112,9 +112,9 @@ const OffersTab = () => {
               </div>
               <div className="flex justify-between items-end mt-2">
                 <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8"><AvatarImage src={offer.buyer.avatar_url} /><AvatarFallback>{offer.buyer.full_name?.[0]}</AvatarFallback></Avatar>
+                  <Avatar className="h-8 w-8"><AvatarImage src={offer.buyer?.avatar_url || undefined} /><AvatarFallback>{offer.buyer?.full_name?.[0]}</AvatarFallback></Avatar>
                   <div>
-                    <p className="text-sm font-semibold">{offer.buyer.full_name}</p>
+                    <p className="text-sm font-semibold">{offer.buyer?.full_name}</p>
                     <p className="text-xs text-muted-foreground">{safeFormatDistanceToNow(offer.created_at)}</p>
                   </div>
                 </div>
@@ -137,7 +137,7 @@ const OffersTab = () => {
         <CardContent className="space-y-4">
           {isLoading && <Skeleton className="h-24 w-full" />}
           {sentOffers?.length === 0 && <p className="text-muted-foreground text-center py-4">Nenhuma oferta enviada.</p>}
-          {sentOffers?.map((offer: any) => (
+          {sentOffers?.map((offer) => (
              <div key={offer.id} className="p-3 border rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
