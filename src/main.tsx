@@ -5,11 +5,11 @@ import { Providers } from "@/components/Providers";
 import Root from "@/components/Root";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRoot from "@/components/admin/AdminRoot";
+import NotFound from "@/pages/NotFound"; // Importação direta
 import "@/globals.css";
 
 // Lazy load all page components
 const Index = lazy(() => import("@/pages/Index"));
-const NotFound = lazy(() => import("@/pages/NotFound"));
 const Login = lazy(() => import("@/pages/Login"));
 const CreateAd = lazy(() => import("@/pages/CreateAd"));
 const Profile = lazy(() => import("@/pages/Profile"));
