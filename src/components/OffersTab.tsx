@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { Check, X } from "lucide-react";
 import { useEffect } from "react";
-import { safeFormatDistanceToNow } from "@/lib/utils";
+import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
 import { OfferWithDetails } from "@/types/database";
 
 const fetchOffers = async (userId: string): Promise<OfferWithDetails[]> => {
@@ -112,7 +112,7 @@ const OffersTab = () => {
               </div>
               <div className="flex justify-between items-end mt-2">
                 <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8"><AvatarImage src={offer.buyer?.avatar_url || undefined} /><AvatarFallback>{offer.buyer?.full_name?.[0]}</AvatarFallback></Avatar>
+                  <Avatar className="h-8 w-8"><AvatarImage src={getOptimizedImageUrl(offer.buyer?.avatar_url, { width: 64, height: 64 })} /><AvatarFallback>{offer.buyer?.full_name?.[0]}</AvatarFallback></Avatar>
                   <div>
                     <p className="text-sm font-semibold">{offer.buyer?.full_name}</p>
                     <p className="text-xs text-muted-foreground">{safeFormatDistanceToNow(offer.created_at)}</p>

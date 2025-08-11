@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "react-router-dom";
 import ContactBuyerButton from "./ContactBuyerButton";
 import { useSession } from "@/contexts/SessionContext";
-import { safeFormatDistanceToNow } from "@/lib/utils";
+import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
 
 export type WantedAd = {
   id: string;
@@ -48,7 +48,7 @@ const WantedAdCard = ({ ad }: WantedAdCardProps) => {
           {ad.profiles?.username ? (
             <Link to={`/loja/${ad.profiles.username}`} className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={ad.profiles?.avatar_url || undefined} />
+                <AvatarImage src={getOptimizedImageUrl(ad.profiles?.avatar_url, { width: 64, height: 64 })} />
                 <AvatarFallback>{ad.profiles?.full_name?.[0] || 'U'}</AvatarFallback>
               </Avatar>
               <div>
@@ -61,7 +61,7 @@ const WantedAdCard = ({ ad }: WantedAdCardProps) => {
           ) : (
             <div className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={ad.profiles?.avatar_url || undefined} />
+                <AvatarImage src={getOptimizedImageUrl(ad.profiles?.avatar_url, { width: 64, height: 64 })} />
                 <AvatarFallback>{ad.profiles?.full_name?.[0] || 'U'}</AvatarFallback>
               </Avatar>
               <div>

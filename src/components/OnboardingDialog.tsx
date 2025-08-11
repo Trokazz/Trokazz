@@ -24,7 +24,6 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
-import { useQueryClient } from "@tanstack/react-query";
 import { PartyPopper } from "lucide-react";
 
 const onboardingSchema = z.object({
@@ -35,16 +34,18 @@ const onboardingSchema = z.object({
     .regex(/^[a-z0-9_]+$/, "Use apenas letras minúsculas, números e '_'.")
     .optional()
     .or(z.literal('')),
+  phone: z.string().optional(),
+  avatar: z.instanceof(FileList).optional(),
 });
 
 interface OnboardingDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
 }
 
-export const OnboardingDialog = ({ isOpen, onOpenChange }: OnboardingDialogProps) => {
+export const OnboardingDialog = ({ isOpen, onOpenChange, onSuccess }: OnboardingDialogProps) => {
   const { user } = useSession();
-  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof onboardingSchema>>({
@@ -52,6 +53,7 @@ export const OnboardingDialog = ({ isOpen, onOpenChange }: OnboardingDialogProps
     defaultValues: {
       full_name: "",
       username: "",
+      phone: "",
     },
   });
 
@@ -61,26 +63,41 @@ export const OnboardingDialog = ({ isOpen, onOpenChange }: OnboardingDialogProps
     const toastId = showLoading("Salvando suas informações...");
 
     try {
-      const { error } = await supabase
+      const updatePayload: {
+        full_name: string;
+        username: string | null;
+        phone?: string;
+        avatar_url?: string;
+      } = {
+        full_name: values.full_name,
+        username: values.username || null,
+        phone: values.phone,
+      };
+
+      const avatarFile = values.avatar?.[0];
+      if (avatarFile) {
+        const fileName = `${user.id}/avatar-${Date.now()}`;
+        const { error: uploadError } = await supabase.storage.from("avatars").upload(fileName, avatarFile, { upsert: true });
+        if (uploadError) throw new Error(uploadError.message);
+        const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(fileName);
+        updatePayload.avatar_url = publicUrl;
+      }
+
+      const { error: updateError } = await supabase
         .from("profiles")
-        .update({
-          full_name: values.full_name,
-          username: values.username || null,
-        })
+        .update(updatePayload)
         .eq("id", user.id);
 
-      if (error) {
-        if (error.code === '23505') {
+      if (updateError) {
+        if (updateError.code === '23505') {
           throw new Error("Este nome de usuário já está em uso. Tente outro.");
         }
-        throw error;
+        throw updateError;
       }
 
       dismissToast(toastId);
       showSuccess("Perfil completo! Bem-vindo(a) ao Trokazz!");
-      queryClient.invalidateQueries({ queryKey: ["userProfile", user.id] });
-      queryClient.invalidateQueries({ queryKey: ["headerProfile", user.id] });
-      onOpenChange(false);
+      onSuccess();
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
@@ -101,6 +118,19 @@ export const OnboardingDialog = ({ isOpen, onOpenChange }: OnboardingDialogProps
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+            <FormField
+              control={form.control}
+              name="avatar"
+              render={() => (
+                <FormItem>
+                  <FormLabel>Foto de Perfil (Opcional)</FormLabel>
+                  <FormControl>
+                    <Input type="file" accept="image/*" {...form.register("avatar")} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="full_name"
@@ -127,6 +157,17 @@ export const OnboardingDialog = ({ isOpen, onOpenChange }: OnboardingDialogProps
                   <FormDescription>
                     Este será o endereço da sua loja pública.
                   </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefone (WhatsApp, Opcional)</FormLabel>
+                  <FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}

@@ -15,49 +15,44 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    // 1. Busca a sessão inicial para determinar o estado de login do usuário.
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
-    };
 
-    getInitialSession();
+      // 2. Após a verificação inicial, cria um "ouvinte" para futuras mudanças de autenticação.
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (_event, session) => {
+          // Lida com efeitos colaterais para novos cadastros, como o envio de e-mail de boas-vindas.
+          if (_event === 'SIGNED_IN' && session) {
+            try {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', session.user.id)
+                .single();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (_event === 'SIGNED_IN' && session) {
-          try {
-            // Verifica se o perfil do usuário é novo (ou seja, ainda não tem um nome completo)
-            const { data: profile, error } = await supabase
-              .from('profiles')
-              .select('full_name')
-              .eq('id', session.user.id)
-              .single();
-
-            if (error && error.code !== 'PGRST116') {
-              console.error("Erro ao buscar perfil para e-mail de boas-vindas:", error);
+              // Se for um usuário novo (perfil criado pelo gatilho, mas sem nome completo), envia o e-mail.
+              if (profile && profile.full_name === null) {
+                supabase.functions.invoke('send-welcome-email').catch(err => {
+                  console.error("Falha ao invocar a função de e-mail de boas-vindas:", err);
+                });
+              }
+            } catch (e) {
+              console.error("Erro na lógica de mudança de estado de autenticação (SIGNED_IN):", e);
             }
-
-            // Se o perfil existe mas não tem nome, é um novo usuário.
-            // O perfil é criado automaticamente por um gatilho no cadastro.
-            if (profile && profile.full_name === null) {
-              // Invoca a função de servidor para enviar o e-mail.
-              // É uma operação "dispare e esqueça" do ponto de vista do cliente.
-              supabase.functions.invoke('send-welcome-email').catch(err => {
-                console.error("Falha ao invocar a função de e-mail de boas-vindas:", err);
-              });
-            }
-          } catch (e) {
-            console.error("Erro na lógica de mudança de estado de autenticação (SIGNED_IN):", e);
           }
+          
+          // Atualiza o estado da sessão para refletir a mudança (login, logout, etc.).
+          setSession(session);
         }
-        setSession(session);
-      }
-    );
+      );
 
-    return () => {
-      subscription.unsubscribe();
-    };
+      // Limpa o "ouvinte" quando o componente é desmontado para evitar vazamentos de memória.
+      return () => {
+        subscription.unsubscribe();
+      };
+    });
   }, []);
 
   const value = {
@@ -68,7 +63,7 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
 
   return (
     <SessionContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </SessionContext.Provider>
   );
 };

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Header from "./Header";
 import SubHeader from "./SubHeader";
 import { Outlet, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
 import MaintenancePage from "@/pages/Maintenance";
@@ -38,6 +38,7 @@ const fetchProfile = async (userId: string | undefined) => {
 const Root = () => {
   const { user, loading: sessionLoading } = useSession();
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: settings, isLoading: isLoadingSettings } = useQuery({
     queryKey: ["siteSettings"],
@@ -54,6 +55,17 @@ const Root = () => {
       setIsOnboardingOpen(true);
     }
   }, [user, profile]);
+
+  const handleOnboardingComplete = async () => {
+    if (!user) return;
+    // Força a aplicação a esperar que os dados do perfil sejam atualizados ANTES de continuar.
+    await queryClient.refetchQueries({ queryKey: ["userRole", user.id], exact: true });
+    await queryClient.refetchQueries({ queryKey: ["headerProfile", user.id], exact: true });
+    await queryClient.refetchQueries({ queryKey: ["profilePageData", user.id], exact: true });
+    
+    // Agora que os dados estão frescos, fecha o diálogo.
+    setIsOnboardingOpen(false);
+  };
 
   const isLoading = isLoadingSettings || sessionLoading || (!!user && isLoadingProfile);
 
@@ -92,7 +104,11 @@ const Root = () => {
           </nav>
         </div>
       </footer>
-      <OnboardingDialog isOpen={isOnboardingOpen} onOpenChange={setIsOnboardingOpen} />
+      <OnboardingDialog
+        isOpen={isOnboardingOpen}
+        onOpenChange={setIsOnboardingOpen}
+        onSuccess={handleOnboardingComplete}
+      />
       <MobileBottomNav />
     </div>
   );
