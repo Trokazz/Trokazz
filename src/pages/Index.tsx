@@ -1,4 +1,4 @@
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import AdCard, { Advertisement } from "@/components/AdCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,25 +10,9 @@ import ErrorState from "@/components/ErrorState";
 
 type GenericAd = Advertisement & { distance?: number };
 
-// Funções de busca independentes
-const fetchBanners = async () => {
-  const { data, error } = await supabase.rpc('get_home_banners');
-  if (error) throw new Error("Falha ao carregar banners.");
-  return data;
-};
-const fetchStories = async () => {
-  const { data, error } = await supabase.rpc('get_home_stories');
-  if (error) throw new Error("Falha ao carregar destaques.");
-  return data;
-};
-const fetchAds = async () => {
-  const { data, error } = await supabase.rpc('get_home_ads');
-  if (error) throw new Error("Falha ao carregar anúncios.");
-  return data;
-};
-const fetchActivityFeed = async () => {
-  const { data, error } = await supabase.rpc('get_home_activity_feed');
-  if (error) throw new Error("Falha ao carregar feed de atividades.");
+const fetchHomePageData = async () => {
+  const { data, error } = await supabase.rpc('get_home_page_data');
+  if (error) throw new Error("Falha ao carregar os dados da página inicial.");
   return data;
 };
 
@@ -73,18 +57,10 @@ const Index = () => {
   const { user } = useSession();
   const queryClient = useQueryClient();
 
-  const [
-    bannersQuery,
-    storiesQuery,
-    adsQuery,
-    feedQuery
-  ] = useQueries({
-    queries: [
-      { queryKey: ['homeBanners'], queryFn: fetchBanners, staleTime: 5 * 60 * 1000 },
-      { queryKey: ['homeStories'], queryFn: fetchStories, staleTime: 5 * 60 * 1000 },
-      { queryKey: ['homeAds'], queryFn: fetchAds, staleTime: 5 * 60 * 1000 },
-      { queryKey: ['homeActivityFeed'], queryFn: fetchActivityFeed, staleTime: 5 * 60 * 1000 },
-    ]
+  const { data: homeData, isLoading, isError, error } = useQuery({
+    queryKey: ['homePageData'],
+    queryFn: fetchHomePageData,
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 
   const { data: favoriteIds } = useQuery({
@@ -93,31 +69,30 @@ const Index = () => {
     enabled: !!user,
   });
 
-  // O conteúdo principal (anúncios) é o único que deve mostrar um erro de página inteira.
-  if (adsQuery.isError) {
-    return <ErrorState message={adsQuery.error.message} onRetry={() => queryClient.invalidateQueries({ queryKey: ['homeAds'] })} />
+  if (isError) {
+    return <ErrorState message={error.message} onRetry={() => queryClient.invalidateQueries({ queryKey: ['homePageData'] })} />
   }
 
   const sectionTitle = "Destaques Recentes";
 
   return (
     <div className="space-y-8">
-      {storiesQuery.isError ? <div className="text-destructive text-center p-4 rounded-md bg-destructive/10">Não foi possível carregar os destaques.</div> : <AdStories stories={storiesQuery.data} isLoading={storiesQuery.isLoading} />}
-      {bannersQuery.isError ? <div className="text-destructive text-center p-4 rounded-md bg-destructive/10">Não foi possível carregar os banners.</div> : <PromoBanner banners={bannersQuery.data} isLoading={bannersQuery.isLoading} />}
+      <AdStories stories={homeData?.stories} isLoading={isLoading} />
+      <PromoBanner banners={homeData?.banners} isLoading={isLoading} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <section className="lg:col-span-2">
           <h2 className="text-2xl font-bold mb-6">{sectionTitle}</h2>
           
-          {adsQuery.isLoading ? (
+          {isLoading ? (
             <AdGridSkeleton />
           ) : (
-            <AdGrid ads={adsQuery.data || []} favoriteIds={favoriteIds || []} />
+            <AdGrid ads={homeData?.ads || []} favoriteIds={favoriteIds || []} />
           )}
         </section>
 
         <aside className="lg:col-span-1 lg:sticky lg:top-24">
-          {feedQuery.isError ? <div className="text-destructive text-center p-4 rounded-md bg-destructive/10">Não foi possível carregar as atividades.</div> : <ActivityFeed activities={feedQuery.data} isLoading={feedQuery.isLoading} />}
+          <ActivityFeed activities={homeData?.activity_feed} isLoading={isLoading} />
         </aside>
       </div>
     </div>

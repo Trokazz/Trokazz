@@ -3,6 +3,7 @@ import type { Theme } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigate, Link } from "react-router-dom";
 import { useSession } from "@/contexts/SessionContext";
+import { showError } from "@/utils/toast";
 
 const Login = () => {
   const { session } = useSession();
@@ -99,7 +100,7 @@ const Login = () => {
           <Auth
             supabaseClient={supabase}
             appearance={{ theme: customTheme }}
-            providers={[]}
+            providers={['google']}
             localization={{
               variables: {
                 sign_in: {
@@ -114,6 +115,8 @@ const Login = () => {
                   password_label: "Crie uma senha",
                   button_label: "Criar conta",
                   link_text: "Não tem uma conta? Crie uma",
+                  // @ts-ignore
+                  database_error: "Não foi possível criar sua conta. Por favor, tente novamente mais tarde.",
                 },
                 forgotten_password: {
                   email_label: "Seu e-mail",
@@ -124,14 +127,11 @@ const Login = () => {
                     password_label: "Nova senha",
                     button_label: "Atualizar senha",
                 },
-                magic_link: {
-                  link_text: "Entrar com link mágico por e-mail",
-                }
               },
             }}
             theme="light"
             showLinks={true}
-            magicLink={true}
+            magicLink={false}
           />
         </div>
       </div>

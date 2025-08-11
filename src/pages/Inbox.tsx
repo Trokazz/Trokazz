@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { safeFormatDistanceToNow } from "@/lib/utils";
+import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
 import { ConversationWithDetails } from "@/types/database";
 
 const fetchConversations = async (userId: string): Promise<ConversationWithDetails[]> => {
@@ -74,7 +74,7 @@ const Inbox = () => {
                 className={`flex items-center gap-4 p-3 rounded-lg transition-colors hover:bg-muted ${isUnread ? 'bg-primary/10' : ''}`}
               >
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={otherUser.avatar_url || undefined} />
+                  <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 100, height: 100 })} />
                   <AvatarFallback>{getInitials(otherUser.full_name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 overflow-hidden">

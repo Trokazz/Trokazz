@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Send, ArrowLeft, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { safeFormatDate } from "@/lib/utils";
+import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
 import { showError, showSuccess } from "@/utils/toast";
 
 type Message = {
@@ -180,7 +180,7 @@ const Conversation = () => {
         ) : otherUser && (
           <div className="flex items-center gap-2">
             <Avatar>
-              <AvatarImage src={otherUser.avatar_url || undefined} />
+              <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 80, height: 80 })} />
               <AvatarFallback>{otherUser.full_name?.[0] || 'U'}</AvatarFallback>
             </Avatar>
             <div>
@@ -221,7 +221,7 @@ const Conversation = () => {
             )}
             {message.sender_id !== user?.id && (
               <Avatar className="h-8 w-8">
-                <AvatarImage src={message.profiles?.avatar_url || undefined} />
+                <AvatarImage src={getOptimizedImageUrl(message.profiles?.avatar_url, { width: 64, height: 64 })} />
                 <AvatarFallback>{message.profiles?.full_name?.[0] || 'U'}</AvatarFallback>
               </Avatar>
             )}

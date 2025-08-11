@@ -56,7 +56,6 @@ const CreateAd = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categoryConfig, setCategoryConfig] = useState<any>({ hasPriceFilter: true, fields: [] });
-  const [location, setLocation] = useState<{latitude: number, longitude: number} | null>(null);
 
   const { data: categories } = useQuery({
     queryKey: ["categories"],
@@ -75,10 +74,6 @@ const CreateAd = () => {
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
         form.setValue('latitude', position.coords.latitude);
         form.setValue('longitude', position.coords.longitude);
       },
@@ -111,18 +106,32 @@ const CreateAd = () => {
     const uploadedImagePaths: string[] = [];
 
     try {
-      const imageFiles = values.images;
-      const imageUrls: string[] = [];
-
-      for (const imageFile of imageFiles) {
-        const fileName = `${user.id}/${Date.now()}-${imageFile.name}`;
-        const { error: uploadError } = await supabase.storage.from("advertisements").upload(fileName, imageFile);
-        if (uploadError) throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
-        
-        uploadedImagePaths.push(fileName);
-        const { data: { publicUrl } } = supabase.storage.from("advertisements").getPublicUrl(fileName);
-        imageUrls.push(publicUrl);
+      const priceToInsert = categoryConfig.hasPriceFilter !== false ? values.price : 0;
+      if (categoryConfig.hasPriceFilter !== false && (priceToInsert === undefined || priceToInsert === null || priceToInsert <= 0)) {
+          throw new Error("Por favor, insira um preço válido e positivo para esta categoria.");
       }
+
+      const imageFiles = values.images;
+      
+      const uploadPromises = imageFiles.map(file => {
+        const fileName = `${user.id}/${Date.now()}-${Math.random()}-${file.name}`;
+        uploadedImagePaths.push(fileName);
+        return supabase.storage.from("advertisements").upload(fileName, file);
+      });
+
+      const uploadResults = await Promise.all(uploadPromises);
+
+      const uploadErrors = uploadResults.filter(result => result.error);
+      if (uploadErrors.length > 0) {
+        throw new Error(`Erro no upload de ${uploadErrors.length} imagem(ns): ${uploadErrors[0].error.message}`);
+      }
+
+      const imageUrls = uploadResults.map(result => {
+        if (!result.data?.path) {
+          throw new Error("Um caminho de imagem não foi retornado após o upload.");
+        }
+        return supabase.storage.from("advertisements").getPublicUrl(result.data.path).data.publicUrl;
+      });
 
       const standardFields = ['title', 'description', 'price', 'images', 'category_slug', 'latitude', 'longitude'];
       const metadata: { [key: string]: any } = {};
@@ -137,16 +146,15 @@ const CreateAd = () => {
         .insert({
           title: values.title,
           description: values.description,
-          price: categoryConfig.hasPriceFilter !== false ? values.price : 0,
+          price: priceToInsert,
           category_slug: values.category_slug,
           image_urls: imageUrls,
           user_id: user.id,
           metadata: Object.keys(metadata).length > 0 ? metadata : null,
           latitude: values.latitude,
           longitude: values.longitude,
-        })
-        .select()
-        .single();
+          status: 'pending_approval',
+        });
 
       if (insertError) throw new Error(`Erro ao criar o anúncio: ${insertError.message}`);
 
@@ -154,7 +162,6 @@ const CreateAd = () => {
       showSuccess("Anúncio enviado para revisão!");
       navigate(`/perfil`);
     } catch (error) {
-      // Se algo der errado, remove as imagens que já foram enviadas.
       if (uploadedImagePaths.length > 0) {
         await supabase.storage.from("advertisements").remove(uploadedImagePaths);
       }
