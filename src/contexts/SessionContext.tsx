@@ -1,68 +1,46 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
+import { showLoading, dismissToast, showError } from '@/utils/toast';
 
-interface SessionContextValue {
+interface SessionContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
 }
 
-const SessionContext = createContext<SessionContextValue | undefined>(undefined);
+const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
-export const SessionProvider = ({ children }: { children: React.ReactNode }) => {
+export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Busca a sessão inicial para determinar o estado de login do usuário.
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const getSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error("Error getting session:", error);
+        showError("Erro ao carregar sessão: " + error.message);
+      }
       setSession(session);
+      setUser(session?.user || null);
       setLoading(false);
+    };
 
-      // 2. Após a verificação inicial, cria um "ouvinte" para futuras mudanças de autenticação.
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (_event, session) => {
-          // Lida com efeitos colaterais para novos cadastros, como o envio de e-mail de boas-vindas.
-          if (_event === 'SIGNED_IN' && session) {
-            try {
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', session.user.id)
-                .single();
+    getSession();
 
-              // Se for um usuário novo (perfil criado pelo gatilho, mas sem nome completo), envia o e-mail.
-              if (profile && profile.full_name === null) {
-                supabase.functions.invoke('send-welcome-email').catch(err => {
-                  console.error("Falha ao invocar a função de e-mail de boas-vindas:", err);
-                });
-              }
-            } catch (e) {
-              console.error("Erro na lógica de mudança de estado de autenticação (SIGNED_IN):", e);
-            }
-          }
-          
-          // Atualiza o estado da sessão para refletir a mudança (login, logout, etc.).
-          setSession(session);
-        }
-      );
-
-      // Limpa o "ouvinte" quando o componente é desmontado para evitar vazamentos de memória.
-      return () => {
-        subscription.unsubscribe();
-      };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user || null);
+      setLoading(false);
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const value = {
-    session,
-    user: session?.user ?? null,
-    loading,
-  };
-
   return (
-    <SessionContext.Provider value={value}>
+    <SessionContext.Provider value={{ session, user, loading }}>
       {children}
     </SessionContext.Provider>
   );
@@ -71,7 +49,7 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
 export const useSession = () => {
   const context = useContext(SessionContext);
   if (context === undefined) {
-    throw new Error("useSession must be used within a SessionProvider");
+    throw new Error('useSession must be used within a SessionContextProvider');
   }
   return context;
 };

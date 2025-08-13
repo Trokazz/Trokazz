@@ -1,8 +1,11 @@
+import React, { Suspense } from "react";
 import { useSession } from "@/contexts/SessionContext";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, Outlet } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import AdminLayout from "./AdminLayout"; // Importar AdminLayout
+import AdminPageSkeleton from "./AdminPageSkeleton"; // Importar AdminPageSkeleton
 
 const fetchProfile = async (userId: string | undefined) => {
   if (!userId) return null;
@@ -18,7 +21,7 @@ const fetchProfile = async (userId: string | undefined) => {
   return data;
 };
 
-const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const AdminProtectedRoute = () => {
   const { user, loading: sessionLoading } = useSession();
   const location = useLocation();
 
@@ -50,7 +53,14 @@ const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>;
+  // Se o usuário é admin, renderiza o layout de admin com as rotas filhas
+  return (
+    <AdminLayout>
+      <Suspense fallback={<AdminPageSkeleton />}>
+        <Outlet />
+      </Suspense>
+    </AdminLayout>
+  );
 };
 
 export default AdminProtectedRoute;

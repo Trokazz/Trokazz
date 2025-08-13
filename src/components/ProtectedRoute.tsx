@@ -1,8 +1,9 @@
+import React from "react";
 import { useSession } from "@/contexts/SessionContext";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, Outlet } from "react-router-dom"; // Adicionado Outlet
 import { Skeleton } from "./ui/skeleton";
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const ProtectedRoute = () => { // Removido { children }
   const { session, loading } = useSession();
   const location = useLocation();
 
@@ -24,7 +25,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>;
+  return <Outlet />; // Renderiza Outlet para rotas aninhadas
 };
 
 export default ProtectedRoute;

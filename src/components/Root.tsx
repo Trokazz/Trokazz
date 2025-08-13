@@ -1,14 +1,12 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import Header from "./Header";
 import SubHeader from "./SubHeader";
-import { Outlet, Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
 import MaintenancePage from "@/pages/Maintenance";
 import { Skeleton } from "./ui/skeleton";
-import { useState, useEffect } from "react";
-import { OnboardingDialog } from "./OnboardingDialog";
 import MobileBottomNav from "./MobileBottomNav";
 import PageSkeleton from "./PageSkeleton";
 
@@ -21,53 +19,34 @@ const fetchSiteSettings = async () => {
   }, {} as { [key: string]: any });
 };
 
-const fetchProfile = async (userId: string | undefined) => {
+const fetchProfileStatus = async (userId: string | undefined) => {
   if (!userId) return null;
   const { data, error } = await supabase
     .from("profiles")
-    .select("role, full_name")
+    .select("full_name, username, role")
     .eq("id", userId)
     .single();
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
+  if (error && error.code !== 'PGRST116') throw error;
   return data;
 };
 
 const Root = () => {
-  const { user, loading: sessionLoading } = useSession();
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-  const queryClient = useQueryClient();
+  const { user, session, loading: sessionLoading } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const { data: settings, isLoading: isLoadingSettings } = useQuery({
     queryKey: ["siteSettings"],
     queryFn: fetchSiteSettings,
   });
-  const { data: profile, isLoading: isLoadingProfile } = useQuery({
-    queryKey: ["userRole", user?.id],
-    queryFn: () => fetchProfile(user?.id),
+
+  const { data: profileStatus, isLoading: isLoadingProfile } = useQuery({
+    queryKey: ["profileStatus", user?.id],
+    queryFn: () => fetchProfileStatus(user?.id),
     enabled: !sessionLoading && !!user,
   });
 
-  useEffect(() => {
-    if (user && profile && !profile.full_name) {
-      setIsOnboardingOpen(true);
-    }
-  }, [user, profile]);
-
-  const handleOnboardingComplete = async () => {
-    if (!user) return;
-    // Força a aplicação a esperar que os dados do perfil sejam atualizados ANTES de continuar.
-    await queryClient.refetchQueries({ queryKey: ["userRole", user.id], exact: true });
-    await queryClient.refetchQueries({ queryKey: ["headerProfile", user.id], exact: true });
-    await queryClient.refetchQueries({ queryKey: ["profilePageData", user.id], exact: true });
-    
-    // Agora que os dados estão frescos, fecha o diálogo.
-    setIsOnboardingOpen(false);
-  };
-
-  const isLoading = isLoadingSettings || sessionLoading || (!!user && isLoadingProfile);
+  const isLoading = isLoadingSettings || sessionLoading;
 
   if (isLoading) {
     return (
@@ -79,7 +58,7 @@ const Root = () => {
   }
 
   const isMaintenanceMode = settings?.maintenance_mode === 'true';
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profileStatus?.role === 'admin';
 
   if (isMaintenanceMode && !isAdmin) {
     return <MaintenancePage />;
@@ -104,11 +83,6 @@ const Root = () => {
           </nav>
         </div>
       </footer>
-      <OnboardingDialog
-        isOpen={isOnboardingOpen}
-        onOpenChange={setIsOnboardingOpen}
-        onSuccess={handleOnboardingComplete}
-      />
       <MobileBottomNav />
     </div>
   );

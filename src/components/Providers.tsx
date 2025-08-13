@@ -3,7 +3,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { SessionProvider } from "@/contexts/SessionContext";
+import { SessionContextProvider } from "@/contexts/SessionContext"; // Corrigido: SessionProvider para SessionContextProvider
+import { Suspense } from "react";
+import PageSkeleton from "./PageSkeleton";
 
 const queryClient = new QueryClient();
 
@@ -12,11 +14,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-          <SessionProvider>
+          <SessionContextProvider>
             <Sonner />
             <Toaster />
-            {children}
-          </SessionProvider>
+            <Suspense fallback={<PageSkeleton />}>
+              {children}
+            </Suspense>
+          </SessionContextProvider>
         </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>
