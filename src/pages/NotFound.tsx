@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
 
 const NotFound = () => {
   const location = useLocation();
@@ -10,6 +11,14 @@ const NotFound = () => {
       location.pathname,
     );
   }, [location.pathname]);
+
+  // Adicionando o hook usePageMetadata
+  usePageMetadata({
+    title: "Página Não Encontrada - Trokazz",
+    description: "A página que você está procurando não foi encontrada no Trokazz.",
+    keywords: "404, página não encontrada, erro, trokazz",
+    ogUrl: window.location.href,
+  });
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">

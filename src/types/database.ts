@@ -17,6 +17,10 @@ export type Profile = {
   status: 'active' | 'suspended';
   service_tags: string[] | null;
   badges?: ReputationBadgeType[];
+  account_type: 'fisica' | 'juridica' | null;
+  document_number: string | null;
+  date_of_birth: string | null;
+  email: string | null;
 };
 
 export type Advertisement = {
@@ -102,7 +106,7 @@ export type UserDetailsData = {
 };
 
 export type ProfilePageData = {
-  profile: Profile;
+  profile: Profile | null; // Alterado para permitir null
   ads: (Advertisement & { view_count: number; last_renewed_at: string | null; boosted_until: string | null })[];
   reviews: ReviewWithReviewer[];
   credits: { balance: number } | null;

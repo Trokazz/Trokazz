@@ -13,6 +13,7 @@ import { useForm, Controller } from "react-hook-form";
 import { useEffect, useMemo } from "react";
 import ConnectedServices from "@/components/ConnectedServices";
 import ErrorState from "@/components/ErrorState";
+import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
 
 const ADS_PER_PAGE = 12;
 
@@ -161,6 +162,14 @@ const AdsList = () => {
     }
     return config;
   }, [categoryData]);
+
+  // Adicionando o hook usePageMetadata
+  usePageMetadata({
+    title: `${title} - Trokazz`,
+    description: categoryData?.name ? `Anúncios de ${categoryData.name} em Dourados e região. Compre e venda com segurança no Trokazz.` : "Explore todos os anúncios disponíveis no Trokazz.",
+    keywords: categoryData?.name ? `${categoryData.name}, ${filters.categorySlug}, classificados, dourados, ms, trokazz` : "anúncios, classificados, dourados, ms, trokazz",
+    ogUrl: window.location.href,
+  });
 
   return (
     <div className="space-y-8">

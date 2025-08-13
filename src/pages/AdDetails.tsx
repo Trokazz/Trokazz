@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, UserCircle, MessageCircle, BadgeCheck } from "lucide-react";
+import { CalendarDays, UserCircle, MessageCircle, BadgeCheck, Phone } from "lucide-react";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { useEffect } from "react";
 import ReportAdDialog from "@/components/ReportAdDialog";
@@ -15,6 +15,7 @@ import MakeOfferDialog from "@/components/MakeOfferDialog";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
 import ShareButtons from "@/components/ShareButtons";
 import ErrorState from "@/components/ErrorState";
+import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
 
 const fetchAdDetails = async (id: string) => {
   const { data, error } = await supabase
@@ -35,7 +36,6 @@ const fetchAdDetails = async (id: string) => {
 const AdDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useSession();
-  const queryClient = useQueryClient();
   const adUrl = window.location.href;
 
   useEffect(() => {
@@ -53,12 +53,31 @@ const AdDetails = () => {
     enabled: !!id,
   });
 
+  // Adicionando o hook usePageMetadata
+  usePageMetadata({
+    title: ad ? `${ad.title} - Trokazz` : "Detalhes do Anúncio - Trokazz",
+    description: ad ? ad.description || `Confira este anúncio no Trokazz: ${ad.title}` : "Detalhes de um anúncio no Trokazz.",
+    keywords: ad ? `${ad.title}, ${ad.category_slug}, ${ad.price}, dourados, ms, trokazz` : "anúncio, classificados, dourados, ms",
+    ogTitle: ad ? ad.title : "Detalhes do Anúncio",
+    ogDescription: ad ? ad.description || `Confira este anúncio no Trokazz: ${ad.title}` : "Detalhes de um anúncio no Trokazz.",
+    ogImage: ad?.image_urls?.[0] ? getOptimizedImageUrl(ad.image_urls[0], { width: 1200, height: 630 }) : `${window.location.origin}/logo.png`,
+    ogUrl: adUrl,
+  });
+
   const formattedPrice = ad ? new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
   }).format(ad.price) : "";
 
   const formattedDate = ad ? safeFormatDate(ad.created_at, "dd 'de' LLLL 'de' yyyy") : "";
+
+  const handleWhatsAppClick = () => {
+    if (ad?.profiles?.phone) {
+      const phone = ad.profiles.phone.replace(/\D/g, '');
+      const message = encodeURIComponent(`Olá, vi seu anúncio "${ad.title}" no Trokazz e tenho interesse!`);
+      window.open(`https://wa.me/55${phone}?text=${message}`, '_blank');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -135,6 +154,12 @@ const AdDetails = () => {
                 ) : user ? (
                   ad.profiles && (
                     <>
+                      {ad.profiles.phone && (
+                        <Button onClick={handleWhatsAppClick} className="w-full bg-green-500 hover:bg-green-600" size="lg">
+                          <Phone className="mr-2 h-5 w-5" />
+                          Contatar via WhatsApp
+                        </Button>
+                      )}
                       <SendMessageButton seller={ad.profiles} adId={ad.id} />
                       <MakeOfferDialog adId={ad.id} sellerId={ad.profiles.id} adTitle={ad.title} />
                     </>

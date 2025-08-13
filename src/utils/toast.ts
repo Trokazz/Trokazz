@@ -11,6 +11,15 @@ export const showError = (error: any) => {
     errorMessage = error;
   } else if (error && typeof error.message === 'string') {
     errorMessage = error.message;
+    // Check for more specific Supabase error details
+    if (error.details) {
+      errorMessage += ` Detalhes: ${error.details}`;
+    }
+    if (error.hint) {
+      errorMessage += ` Dica: ${error.hint}`;
+    }
+  } else if (error && error.context?.json?.error) { // For edge function errors
+    errorMessage = error.context.json.error;
   }
 
   console.error("ERRO CAPTURADO:", error);

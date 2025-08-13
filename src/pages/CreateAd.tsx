@@ -153,13 +153,34 @@ const CreateAd = () => {
           metadata: Object.keys(metadata).length > 0 ? metadata : null,
           latitude: values.latitude,
           longitude: values.longitude,
-          status: 'pending_approval',
+          status: 'approved',
         });
 
       if (insertError) throw new Error(`Erro ao criar o anúncio: ${insertError.message}`);
 
-      dismissToast(toastId);
-      showSuccess("Anúncio enviado para revisão!");
+      // Lógica para conceder bônus no primeiro anúncio
+      const { count, error: adCountError } = await supabase
+        .from("advertisements")
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      if (adCountError) {
+        console.error("Erro ao contar anúncios do usuário:", adCountError);
+      } else if (count === 1) {
+        // É o primeiro anúncio, então concede o bônus
+        const { error: creditsInsertError } = await supabase.from("user_credits").insert({ user_id: user.id, balance: 50 });
+        if (creditsInsertError) throw creditsInsertError;
+
+        const { error: transactionInsertError } = await supabase.from("credit_transactions").insert({ user_id: user.id, amount: 50, type: 'signup_bonus', description: 'Bônus de primeiro anúncio!' });
+        if (transactionInsertError) throw transactionInsertError;
+        
+        dismissToast(toastId);
+        showSuccess("Anúncio publicado e bônus de 50 créditos recebido!");
+      } else {
+        dismissToast(toastId);
+        showSuccess("Anúncio publicado com sucesso!");
+      }
+
       navigate(`/perfil`);
     } catch (error) {
       if (uploadedImagePaths.length > 0) {

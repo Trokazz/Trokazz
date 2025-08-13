@@ -41,12 +41,14 @@ import SellerAnalytics from "@/components/SellerAnalytics";
 import OffersTab from "@/components/OffersTab";
 import { isValid } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { BuyCreditsDialog } from "@/components/BuyCreditsDialog";
 import VerificationTab from "@/components/VerificationTab";
-import { getOptimizedImageUrl } from "@/lib/utils";
+import { getOptimizedImageUrl, safeFormatDate } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProfilePageData, Advertisement, ReviewWithReviewer } from "@/types/database";
+
+// Adicionado para depuração: Verifica se o arquivo está sendo processado
+console.log("Profile.tsx file is being processed.");
 
 const profileFormSchema = z.object({
   full_name: z.string().min(3, "O nome completo deve ter pelo menos 3 caracteres."),
@@ -59,16 +61,34 @@ const profileFormSchema = z.object({
   phone: z.string().optional(),
   avatar: z.instanceof(FileList).optional(),
   service_tags: z.string().optional(),
+  account_type: z.string().optional(),
+  document_number: z.string().optional(),
+  date_of_birth: z.string().optional(),
 });
 
 type UserAd = Advertisement & { status: string; view_count: number; last_renewed_at: string | null; boosted_until: string | null };
 
 const fetchProfilePageData = async (userId: string): Promise<ProfilePageData> => {
   const { data, error } = await supabase.rpc('get_profile_page_data', { p_user_id: userId });
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Dados do perfil não encontrados.");
+  if (error) {
+    console.error("Erro ao buscar dados do perfil:", error);
+    throw new Error(error.message);
+  }
+  // Se a RPC retornar um objeto, mas o 'profile' dentro dele for nulo, tratamos aqui.
+  // A RPC 'get_profile_page_data' retorna um JSON, e o campo 'profile' dentro desse JSON
+  // será nulo se não houver um perfil correspondente na tabela 'public.profiles'.
+  if (!data || !data.profile) {
+    console.warn("Dados do perfil não encontrados para o usuário:", userId);
+    return {
+      profile: null,
+      ads: [],
+      reviews: [],
+      credits: { balance: 0 },
+      settings: {},
+    } as ProfilePageData;
+  }
 
-  // Garante que os arrays e objetos aninhados não sejam nulos
+  // Garante que as propriedades são arrays ou objetos vazios se forem null
   data.ads = data.ads || [];
   data.reviews = data.reviews || [];
   data.credits = data.credits || { balance: 0 };
@@ -87,13 +107,25 @@ const Profile = () => {
   
   const activeTab = searchParams.get("tab") || "my-ads";
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery<ProfilePageData>({ // Explicitamente tipando 'data'
     queryKey: ["profilePageData", session?.user?.id],
     queryFn: () => fetchProfilePageData(session!.user!.id),
     enabled: !!session?.user?.id,
   });
 
-  const { profile, ads: userAds, reviews, credits, settings } = data || {};
+  // Adicionado para depuração: Verifica o estado de carregamento e os dados brutos
+  console.log("Profile component render - isLoading:", isLoading);
+  console.log("Profile component render - raw data:", data);
+
+  // Desestruturação única e segura dos dados do perfil
+  const profile = data?.profile;
+  const userAds = data?.ads || [];
+  const reviews = data?.reviews || [];
+  const credits = data?.credits;
+  const settings = data?.settings;
+
+  // Adicionado para depuração: Verifica o objeto de perfil desestruturado
+  console.log("Profile component render - destructured profile:", profile);
 
   const handleTabChange = (value: string) => {
     const newSearchParams = new URLSearchParams(searchParams);
@@ -103,19 +135,32 @@ const Profile = () => {
 
   const profileForm = useForm<z.infer<typeof profileFormSchema>>({
     resolver: zodResolver(profileFormSchema),
-    defaultValues: { full_name: "", username: "", phone: "", service_tags: "" },
+    // Garante que os valores padrão sejam sempre strings, mesmo que profile seja null inicialmente
+    defaultValues: {
+      full_name: profile?.full_name || session?.user?.user_metadata?.full_name || "",
+      username: profile?.username || "",
+      phone: profile?.phone || "",
+      service_tags: profile?.service_tags?.join(', ') || "",
+      // Corrigido: O resultado do ternário já é uma string, não precisa de || ""
+      account_type: profile?.account_type === 'fisica' ? 'Pessoa Física' : 'Pessoa Jurídica',
+      document_number: profile?.document_number || "",
+      date_of_birth: profile?.date_of_birth ? safeFormatDate(profile.date_of_birth, 'dd/MM/yyyy') : "",
+    },
   });
 
   useEffect(() => {
-    if (profile) {
+    if (profile && session?.user) {
       profileForm.reset({
-        full_name: profile.full_name || "",
+        full_name: profile.full_name || session.user.user_metadata?.full_name || "",
         username: profile.username || "",
         phone: profile.phone || "",
         service_tags: profile.service_tags?.join(', ') || "",
+        account_type: profile.account_type === 'fisica' ? 'Pessoa Física' : 'Pessoa Jurídica',
+        document_number: profile.document_number || "",
+        date_of_birth: profile.date_of_birth ? safeFormatDate(profile.date_of_birth, 'dd/MM/yyyy') : "",
       });
     }
-  }, [profile, profileForm]);
+  }, [profile, session?.user, profileForm]);
 
   async function onProfileSubmit(values: z.infer<typeof profileFormSchema>) {
     if (!session?.user) return;
@@ -134,19 +179,22 @@ const Profile = () => {
 
       const serviceTagsArray = values.service_tags?.split(',').map(tag => tag.trim()).filter(Boolean) || null;
 
-      const { error: updateError } = await supabase.from("profiles").update({
+      const { error: updateError } = await supabase.from("profiles").upsert({
+        id: session.user.id,
         full_name: values.full_name,
         username: values.username || null,
         phone: values.phone,
         avatar_url: avatarUrl,
         service_tags: serviceTagsArray,
-      }).eq("id", session.user.id);
+      }).select();
 
       if (updateError) {
+        // A função showError aprimorada agora lida com detalhes de erro do Supabase
+        // Mantemos esta verificação específica para uma mensagem mais amigável para username duplicado
         if (updateError.code === '23505') {
           throw new Error("Este nome de usuário já está em uso. Tente outro.");
         }
-        throw new Error(updateError.message);
+        throw updateError; // Lança o erro para ser capturado pelo catch e exibido por showError
       }
 
       await refetch();
@@ -155,7 +203,7 @@ const Profile = () => {
       showSuccess("Perfil atualizado com sucesso!");
     } catch (error) {
       dismissToast(toastId);
-      showError(error instanceof Error ? error.message : "Erro ao atualizar perfil.");
+      showError(error); // Usando a função showError aprimorada
     } finally {
       setIsSubmitting(false);
     }
@@ -220,6 +268,7 @@ const Profile = () => {
   };
 
   if (isLoading) {
+    console.log("Profile component rendering skeleton.");
     return (
       <div className="space-y-8">
         <Skeleton className="h-64 w-full" />
@@ -227,6 +276,125 @@ const Profile = () => {
       </div>
     );
   }
+
+  // Se o perfil não for encontrado (profile é null)
+  if (!profile) {
+    console.error("Profile data is null. Rendering 'Complete seu Perfil' card.");
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle>Complete seu Perfil</CardTitle>
+          <CardDescription>
+            Parece que seu perfil ainda não está completo. Por favor, preencha suas informações para continuar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...profileForm}>
+            <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-8 pt-6">
+              <div className="flex items-center gap-6">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={getOptimizedImageUrl(profile?.avatar_url, { width: 160, height: 160 })} />
+                  <AvatarFallback>{session?.user.email?.[0] || 'U'}</AvatarFallback>
+                </Avatar>
+                <FormField
+                  control={profileForm.control}
+                  name="avatar"
+                  render={() => (
+                    <FormItem className="flex-1">
+                      <FormLabel>Foto de Perfil</FormLabel>
+                      <FormControl>
+                        <Input type="file" accept="image/*" {...profileForm.register("avatar")} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              {/* Campos de dados da conta desabilitados, mas preenchidos se existirem no perfil */}
+              <div className="space-y-4 border-b pb-6">
+                <h3 className="text-lg font-medium">Dados da Conta (Não Editáveis)</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <FormField control={profileForm.control} name="account_type" render={({ field }) => (
+                    <FormItem><FormLabel>Tipo de Conta</FormLabel><FormControl><Input {...field} disabled value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={profileForm.control} name="document_number" render={({ field }) => (
+                    <FormItem><FormLabel>{profile?.account_type === 'juridica' ? 'CNPJ' : 'CPF'}</FormLabel><FormControl><Input {...field} disabled value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+                <FormField control={profileForm.control} name="date_of_birth" render={({ field }) => (
+                  <FormItem><FormLabel>Data de Nascimento</FormLabel><FormControl><Input {...field} disabled value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                )} />
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Informações Editáveis</h3>
+                <FormField
+                  control={profileForm.control}
+                  name="full_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome Completo</FormLabel>
+                      <FormControl><Input {...field} value={field.value || ''} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={profileForm.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome de Usuário (URL do seu perfil)</FormLabel>
+                      <FormControl>
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3 text-muted-foreground text-sm pointer-events-none">trokazz.com/loja/</span>
+                          <Input placeholder="seu_usuario" className="pl-[155px]" {...field} value={field.value || ''} />
+                        </div>
+                      </FormControl>
+                          <FormDescription>
+                            Este será o endereço público do seu perfil. Use apenas letras minúsculas, números e _.
+                          </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={profileForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefone (WhatsApp)</FormLabel>
+                      <FormControl><Input placeholder="(00) 00000-0000" {...field} value={field.value || ''} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={profileForm.control}
+                  name="service_tags"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tags de Serviço</FormLabel>
+                      <FormControl><Input placeholder="Ex: montador_moveis, eletricista, frete" {...field} value={field.value || ''} /></FormControl>
+                      <FormDescription>
+                        Se você é um prestador de serviço, adicione suas especialidades aqui, separadas por vírgula. Isso ajudará os clientes a te encontrarem.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  console.log("Profile component rendering main content.");
 
   return (
     <>
@@ -248,19 +416,15 @@ const Profile = () => {
             </SelectContent>
           </Select>
         ) : (
-          <ScrollArea className="w-full whitespace-nowrap">
-            <TabsList className="inline-flex">
-              <TabsTrigger value="my-ads">Meus Anúncios</TabsTrigger>
-              <TabsTrigger value="offers">Minhas Ofertas</TabsTrigger>
-              <TabsTrigger value="analytics">Desempenho</TabsTrigger>
-              <TabsTrigger value="favorites">Meus Favoritos</TabsTrigger>
-              <TabsTrigger value="reviews">Minhas Avaliações</TabsTrigger>
-              <TabsTrigger value="perfil">Perfil</TabsTrigger>
-              <TabsTrigger value="verification">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4" /> Verificação
-                </div>
-              </TabsTrigger>
+          <ScrollArea className="w-full whitespace-nowrap border-b">
+            <TabsList className="inline-flex h-auto bg-transparent p-0">
+              <TabsTrigger value="my-ads" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Meus Anúncios</TabsTrigger>
+              <TabsTrigger value="offers" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Minhas Ofertas</TabsTrigger>
+              <TabsTrigger value="analytics" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Desempenho</TabsTrigger>
+              <TabsTrigger value="favorites" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Meus Favoritos</TabsTrigger>
+              <TabsTrigger value="reviews" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Minhas Avaliações</TabsTrigger>
+              <TabsTrigger value="perfil" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Perfil</TabsTrigger>
+              <TabsTrigger value="verification" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Verificação</div></TabsTrigger>
             </TabsList>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
@@ -297,7 +461,9 @@ const Profile = () => {
                         }
                     }
                     
-                    const boostCost = parseInt(settings?.boost_price || '10');
+                    const boostCost = parseInt(settings?.boost_price || '25');
+                    const userBalance = credits?.balance || 0;
+                    const hasEnoughCredits = userBalance >= boostCost;
 
                     return (
                       <div key={ad.id} className="flex items-center justify-between p-2 border rounded-lg gap-2 flex-wrap">
@@ -330,16 +496,30 @@ const Profile = () => {
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>Impulsionar Anúncio</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Seu anúncio será exibido com destaque por {settings?.boost_duration_days || 7} dias.
-                                      Isso custará {boostCost} créditos. Você tem {credits?.balance || 0} créditos.
-                                    </AlertDialogDescription>
+                                    {hasEnoughCredits ? (
+                                      <AlertDialogDescription>
+                                        Seu anúncio "{ad.title}" será exibido com destaque por {settings?.boost_duration_days || 7} dias.
+                                        Isso custará {boostCost} créditos. Você tem {userBalance} créditos.
+                                      </AlertDialogDescription>
+                                    ) : (
+                                      <AlertDialogDescription>
+                                        Você não tem créditos suficientes. Para impulsionar "{ad.title}" por {settings?.boost_duration_days || 7} dias, você precisa de {boostCost} créditos, mas possui apenas {userBalance}.
+                                      </AlertDialogDescription>
+                                    )}
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleBoostAd(ad.id)} disabled={(credits?.balance || 0) < boostCost}>
-                                      Confirmar Impulso
-                                    </AlertDialogAction>
+                                    {hasEnoughCredits ? (
+                                      <AlertDialogAction onClick={() => handleBoostAd(ad.id)}>
+                                        Confirmar Impulso
+                                      </AlertDialogAction>
+                                    ) : (
+                                      <AlertDialogAction asChild>
+                                        <Button onClick={() => setIsCreditsDialogOpen(true)}>
+                                          Comprar Créditos
+                                        </Button>
+                                      </AlertDialogAction>
+                                    )}
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
@@ -466,16 +646,16 @@ const Profile = () => {
         </TabsContent>
 
         <TabsContent value="perfil">
-          <Form {...profileForm}>
-            <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Informações Pessoais</CardTitle>
-                  <CardDescription>Atualize suas informações e foto de perfil.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6 pt-6">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-20 w-20">
+          <Card>
+            <CardHeader>
+              <CardTitle>Informações Pessoais</CardTitle>
+              <CardDescription>Atualize suas informações e foto de perfil.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...profileForm}>
+                <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-8 pt-6">
+                  <div className="flex items-center gap-6">
+                    <Avatar className="h-24 w-24">
                       <AvatarImage src={getOptimizedImageUrl(profile?.avatar_url, { width: 160, height: 160 })} />
                       <AvatarFallback>{profile?.full_name?.[0] || session?.user.email?.[0] || 'U'}</AvatarFallback>
                     </Avatar>
@@ -483,7 +663,7 @@ const Profile = () => {
                       control={profileForm.control}
                       name="avatar"
                       render={() => (
-                        <FormItem>
+                        <FormItem className="flex-1">
                           <FormLabel>Alterar foto</FormLabel>
                           <FormControl>
                             <Input type="file" accept="image/*" {...profileForm.register("avatar")} />
@@ -493,72 +673,92 @@ const Profile = () => {
                       )}
                     />
                   </div>
-                  <FormField
-                    control={profileForm.control}
-                    name="full_name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nome Completo</FormLabel>
-                        <FormControl><Input {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={profileForm.control}
-                    name="username"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nome de Usuário (URL do seu perfil)</FormLabel>
-                        <FormControl>
-                          <div className="relative flex items-center">
-                            <span className="absolute left-3 text-muted-foreground text-sm">trokazz.com/loja/</span>
-                            <Input placeholder="seu_usuario" className="pl-[150px]" {...field} />
-                          </div>
-                        </FormControl>
-                        <FormDescription>
-                          Este será o endereço público do seu perfil. Use apenas letras minúsculas, números e _.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={profileForm.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Telefone (WhatsApp)</FormLabel>
-                        <FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                   <FormField
-                    control={profileForm.control}
-                    name="service_tags"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tags de Serviço</FormLabel>
-                        <FormControl><Input placeholder="Ex: montador_moveis, eletricista, frete" {...field} /></FormControl>
-                        <FormDescription>
-                          Se você é um prestador de serviço, adicione suas especialidades aqui, separadas por vírgula. Isso ajudará os clientes a te encontrarem.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-              <Button type="submit" disabled={isSubmitting} className="mt-6">
-                {isSubmitting ? "Salvando..." : "Salvar Alterações"}
-              </Button>
-            </form>
-          </Form>
+
+                  <div className="space-y-4 border-b pb-6">
+                    <h3 className="text-lg font-medium">Dados da Conta</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <FormField control={profileForm.control} name="account_type" render={({ field }) => (
+                        <FormItem><FormLabel>Tipo de Conta</FormLabel><FormControl><Input {...field} disabled value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={profileForm.control} name="document_number" render={({ field }) => (
+                        <FormItem><FormLabel>{profile?.account_type === 'juridica' ? 'CNPJ' : 'CPF'}</FormLabel><FormControl><Input {...field} disabled value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                    <FormField control={profileForm.control} name="date_of_birth" render={({ field }) => (
+                      <FormItem><FormLabel>Data de Nascimento</FormLabel><FormControl><Input {...field} disabled value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Informações Editáveis</h3>
+                    <FormField
+                      control={profileForm.control}
+                      name="full_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome Completo</FormLabel>
+                          <FormControl><Input {...field} value={field.value || ''} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="username"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome de Usuário (URL do seu perfil)</FormLabel>
+                          <FormControl>
+                            <div className="relative flex items-center">
+                              <span className="absolute left-3 text-muted-foreground text-sm pointer-events-none">trokazz.com/loja/</span>
+                              <Input placeholder="seu_usuario" className="pl-[155px]" {...field} value={field.value || ''} />
+                            </div>
+                          </FormControl>
+                          <FormDescription>
+                            Este será o endereço público do seu perfil. Use apenas letras minúsculas, números e _.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefone (WhatsApp)</FormLabel>
+                          <FormControl><Input placeholder="(00) 00000-0000" {...field} value={field.value || ''} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="service_tags"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tags de Serviço</FormLabel>
+                          <FormControl><Input placeholder="Ex: montador_moveis, eletricista, frete" {...field} value={field.value || ''} /></FormControl>
+                          <FormDescription>
+                            Se você é um prestador de serviço, adicione suas especialidades aqui, separadas por vírgula. Isso ajudará os clientes a te encontrarem.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Salvando..." : "Salvar Alterações"}
+                  </Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
-    <BuyCreditsDialog isOpen={isCreditsDialogOpen} onOpenChange={setIsCreditsDialogOpen} />
+    {/* O componente BuyCreditsDialog foi removido para resolver o erro de CSP. */}
+    {/* <BuyCreditsDialog isOpen={isCreditsDialogOpen} onOpenChange={setIsCreditsDialogOpen} /> */}
     </>
   );
 };

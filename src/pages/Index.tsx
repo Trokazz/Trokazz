@@ -7,6 +7,8 @@ import { useSession } from "@/contexts/SessionContext";
 import ActivityFeed from "@/components/ActivityFeed";
 import AdStories from "@/components/AdStories";
 import ErrorState from "@/components/ErrorState";
+// import AdSenseBlock from "@/components/AdSenseBlock"; // Removido
+import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
 
 type GenericAd = Advertisement & { distance?: number };
 
@@ -69,6 +71,15 @@ const Index = () => {
     enabled: !!user,
   });
 
+  // Adicionando o hook usePageMetadata
+  usePageMetadata({
+    title: "Trokazz - Compre, Venda e Troque em Dourados e Região",
+    description: "Sua nova forma de negociar. Compre, venda e troque com segurança na maior comunidade de classificados de Dourados e região.",
+    keywords: "trokazz, classificados, dourados, ms, compra, venda, troca, anúncios, usados, novos, eletrônicos, veículos, imóveis, serviços",
+    ogImage: `${window.location.origin}/logo.png`,
+    ogUrl: window.location.origin,
+  });
+
   if (isError) {
     return <ErrorState message={error.message} onRetry={() => queryClient.invalidateQueries({ queryKey: ['homePageData'] })} />
   }
@@ -91,8 +102,9 @@ const Index = () => {
           )}
         </section>
 
-        <aside className="lg:col-span-1 lg:sticky lg:top-24">
+        <aside className="lg:col-span-1 lg:sticky lg:top-24 space-y-8">
           <ActivityFeed activities={homeData?.activity_feed} isLoading={isLoading} />
+          {/* <AdSenseBlock /> */} {/* Removido */}
         </aside>
       </div>
     </div>

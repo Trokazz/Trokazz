@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import ReputationBadge, { ReputationBadgeType } from "@/components/ReputationBadge";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
 import { ReviewWithReviewer } from "@/types/database";
+import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
 
 const reviewSchema = z.object({
   rating: z.number().min(1, "A avaliação é obrigatória.").max(5),
@@ -119,6 +120,15 @@ const PublicProfilePage = () => {
       queryKey: ["profileReviews", profile?.id],
       queryFn: () => fetchReviewsBySellerId(profile!.id),
       enabled: !!profile,
+  });
+
+  // Adicionando o hook usePageMetadata
+  usePageMetadata({
+    title: profile ? `${profile.full_name} (@${profile.username}) - Trokazz` : "Perfil de Usuário - Trokazz",
+    description: profile ? `Veja os anúncios e avaliações de ${profile.full_name} no Trokazz. ${profile.service_tags?.join(', ') || ''}` : "Perfil de usuário no Trokazz.",
+    keywords: profile ? `${profile.full_name}, ${profile.username}, ${profile.service_tags?.join(', ')}, vendedor, trokazz, dourados` : "perfil, usuário, vendedor, trokazz",
+    ogImage: profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }) : `${window.location.origin}/logo.png`,
+    ogUrl: window.location.href,
   });
 
   const reviewForm = useForm<z.infer<typeof reviewSchema>>({
