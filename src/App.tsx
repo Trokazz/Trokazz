@@ -28,7 +28,6 @@ const NotFound = lazy(() => import("@/pages/NotFound"));
 
 // Admin Pages
 const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
-// const AdminRoot = lazy(() => import("@/components/admin/AdminRoot")); // Removido
 const ManageAds = lazy(() => import("@/pages/admin/ManageAds"));
 const EditAd = lazy(() => import("@/pages/admin/EditAd"));
 const ManageUsers = lazy(() => import("@/pages/admin/ManageUsers"));
@@ -51,6 +50,25 @@ function App() {
         <Route path="login" element={<Login />} />
         <Route path="signup" element={<Signup />} />
 
+        {/* Admin Routes - Agora são rotas de nível superior */}
+        <Route path="admin" element={<AdminProtectedRoute />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="investor-dashboard" element={<InvestorDashboard />} />
+          <Route path="moderation-center" element={<ModerationCenter />} />
+          <Route path="insights" element={<Insights />} />
+          <Route path="search-analytics" element={<SearchAnalytics />} />
+          <Route path="ads" element={<ManageAds />} />
+          <Route path="ads/:id/edit" element={<EditAd />} />
+          <Route path="users" element={<ManageUsers />} />
+          <Route path="users/:id" element={<UserDetails />} />
+          <Route path="categories" element={<ManageCategories />} />
+          <Route path="banners" element={<ManageBanners />} />
+          <Route path="pages" element={<ManagePages />} />
+          <Route path="credits" element={<ManageCreditPackages />} />
+          <Route path="settings" element={<SiteSettings />} />
+        </Route>
+
+        {/* Todas as outras rotas (públicas e protegidas do usuário) permanecem sob o Root */}
         <Route path="/" element={<Root />}>
           <Route index element={<Index />} />
           <Route path="anuncio/:id" element={<AdDetails />} />
@@ -73,24 +91,6 @@ function App() {
             <Route path="servicos/novo" element={<CreateServiceAd />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="chat/:conversationId" element={<Conversation />} />
-          </Route>
-
-          {/* Admin Routes */}
-          <Route path="admin" element={<AdminProtectedRoute />}> {/* Agora AdminProtectedRoute gerencia o layout e suspense */}
-            <Route index element={<AdminDashboard />} />
-            <Route path="investor-dashboard" element={<InvestorDashboard />} />
-            <Route path="moderation-center" element={<ModerationCenter />} />
-            <Route path="insights" element={<Insights />} />
-            <Route path="search-analytics" element={<SearchAnalytics />} />
-            <Route path="ads" element={<ManageAds />} />
-            <Route path="ads/:id/edit" element={<EditAd />} />
-            <Route path="users" element={<ManageUsers />} />
-            <Route path="users/:id" element={<UserDetails />} />
-            <Route path="categories" element={<ManageCategories />} />
-            <Route path="banners" element={<ManageBanners />} />
-            <Route path="pages" element={<ManagePages />} />
-            <Route path="credits" element={<ManageCreditPackages />} />
-            <Route path="settings" element={<SiteSettings />} />
           </Route>
 
           {/* Catch-all route */}
