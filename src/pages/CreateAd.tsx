@@ -27,6 +27,8 @@ import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import MultiImageUploader from "@/components/MultiImageUploader";
+import { Skeleton } from "@/components/ui/skeleton"; // Importar Skeleton
+import { useNavigate } from "react-router-dom"; // Adicionado: Importação do useNavigate
 
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -85,7 +87,7 @@ const CreateAd = () => {
   const [selectedCategoryPath, setSelectedCategoryPath] = useState<string[]>([]);
   const [finalCategorySlug, setFinalCategorySlug] = useState<string>('');
 
-  const { data: allCategories } = useQuery<Category[]>({
+  const { data: allCategories, isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ["categories"],
     queryFn: fetchCategories,
   });
@@ -136,6 +138,15 @@ const CreateAd = () => {
 
   // Renderiza os seletores de categoria dinamicamente
   const renderCategorySelects = () => {
+    if (isLoadingCategories) {
+      return (
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      );
+    }
+
     let currentParentSlug: string | null = null;
     const selects = [];
 

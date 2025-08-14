@@ -20,7 +20,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link, useSearchParams } from "react-router-dom";
-import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Star, Zap, Gem, ShieldCheck, CalendarX, Bell } from "lucide-react";
+import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Star, Zap, Gem, ShieldCheck, CalendarX } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +42,6 @@ import OffersTab from "@/components/OffersTab";
 import { isValid, differenceInDays } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import VerificationTab from "@/components/VerificationTab";
-import PushNotificationSettings from "@/components/PushNotificationSettings";
 import BuyCreditsDialog from "@/components/BuyCreditsDialog"; // Importando o componente
 import { getOptimizedImageUrl, safeFormatDate } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -432,7 +431,6 @@ const Profile = () => {
               <SelectItem value="reviews">Minhas Avaliações</SelectItem>
               <SelectItem value="perfil">Perfil</SelectItem>
               <SelectItem value="verification">Verificação</SelectItem>
-              <SelectItem value="notifications">Notificações</SelectItem>
             </SelectContent>
           </Select>
         ) : (
@@ -445,7 +443,6 @@ const Profile = () => {
               <TabsTrigger value="reviews" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Minhas Avaliações</TabsTrigger>
               <TabsTrigger value="perfil" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Perfil</TabsTrigger>
               <TabsTrigger value="verification" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Verificação</div></TabsTrigger>
-              <TabsTrigger value="notifications" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"><div className="flex items-center gap-2"><Bell className="h-4 w-4" /> Notificações</div></TabsTrigger>
             </TabsList>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
@@ -688,9 +685,6 @@ const Profile = () => {
         </TabsContent>
         <TabsContent value="verification">
           <VerificationTab />
-        </TabsContent>
-        <TabsContent value="notifications">
-          <PushNotificationSettings />
         </TabsContent>
 
         <TabsContent value="perfil">
