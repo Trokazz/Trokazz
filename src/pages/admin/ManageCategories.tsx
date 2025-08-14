@@ -21,11 +21,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const categorySchema = z.object({
   name: z.string().min(1, "O nome é obrigatório."),
   slug: z.string().min(1, "O slug é obrigatório."),
   icon: z.string().min(1, "O ícone é obrigatório (ex: Car, Home)."),
+  parent_slug: z.string().nullable().optional(), // Adicionado para subcategorias
   custom_fields: z.string().optional().refine(val => {
     if (!val || val.trim() === '') return true;
     try {
@@ -38,7 +40,7 @@ const categorySchema = z.object({
   connected_service_tags: z.string().optional(),
 });
 
-type Category = { id: string; name: string; slug: string; icon: string; custom_fields: any; connected_service_tags: string[] | null };
+type Category = { id: string; name: string; slug: string; icon: string; custom_fields: any; connected_service_tags: string[] | null; parent_slug: string | null };
 
 const fetchCategories = async () => {
   const { data, error } = await supabase.from("categories").select("*").order("name");
@@ -66,6 +68,7 @@ const ManageCategories = () => {
       name: category ? category.name : "",
       slug: category ? category.slug : "",
       icon: category ? category.icon : "",
+      parent_slug: category ? category.parent_slug : null, // Definir parent_slug
       custom_fields: category && category.custom_fields ? JSON.stringify(category.custom_fields, null, 2) : "",
       connected_service_tags: category?.connected_service_tags?.join(', ') || "",
     });
@@ -82,6 +85,7 @@ const ManageCategories = () => {
         name: values.name,
         slug: values.slug,
         icon: values.icon,
+        parent_slug: values.parent_slug, // Incluir parent_slug no payload
         custom_fields: customFields,
         connected_service_tags: serviceTagsArray,
       };
@@ -118,6 +122,8 @@ const ManageCategories = () => {
     }
   };
 
+  const topLevelCategories = categories?.filter(cat => !cat.parent_slug) || [];
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -133,6 +139,7 @@ const ManageCategories = () => {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Slug</TableHead>
+                <TableHead>Pai</TableHead> {/* Nova coluna */}
                 <TableHead>Ícone</TableHead>
                 <TableHead>Tags de Serviço</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -143,6 +150,7 @@ const ManageCategories = () => {
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-5 w-20" /></TableCell> {/* Skeleton para a nova coluna */}
                   <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                   <TableCell className="text-right"><Skeleton className="h-8 w-8 inline-block" /></TableCell>
@@ -152,6 +160,7 @@ const ManageCategories = () => {
                 <TableRow key={cat.id}>
                   <TableCell className="font-medium">{cat.name}</TableCell>
                   <TableCell>{cat.slug}</TableCell>
+                  <TableCell>{cat.parent_slug ? categories.find(p => p.slug === cat.parent_slug)?.name : '-'}</TableCell> {/* Exibir nome do pai */}
                   <TableCell>{cat.icon}</TableCell>
                   <TableCell>{cat.connected_service_tags?.join(', ')}</TableCell>
                   <TableCell className="text-right">
@@ -186,6 +195,21 @@ const ManageCategories = () => {
               <Label htmlFor="slug">Slug</Label>
               <Input id="slug" {...form.register("slug")} />
               {form.formState.errors.slug && <p className="text-red-500 text-sm">{form.formState.errors.slug.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="parent_slug">Categoria Pai (Opcional)</Label>
+              <Select onValueChange={(value) => form.setValue("parent_slug", value === "" ? null : value)} value={form.watch("parent_slug") || ""}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma categoria pai" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Nenhuma (Categoria Principal)</SelectItem>
+                  {topLevelCategories.filter(cat => cat.id !== editingCategory?.id).map(cat => ( // Evitar que uma categoria seja sua própria pai
+                    <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.parent_slug && <p className="text-red-500 text-sm">{form.formState.errors.parent_slug.message}</p>}
             </div>
             <div>
               <Label htmlFor="icon">Ícone (Lucide)</Label>

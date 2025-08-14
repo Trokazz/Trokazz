@@ -90,9 +90,9 @@ const Login = () => {
                     <div className="flex items-center justify-between">
                       <FormLabel>Senha</FormLabel>
                       <div className="text-sm">
-                        <a href="#" className="font-semibold text-primary hover:text-primary/90">
+                        <Link to="/forgot-password" className="font-semibold text-primary hover:text-primary/90">
                           Esqueceu a senha?
-                        </a>
+                        </Link>
                       </div>
                     </div>
                     <FormControl><Input type="password" placeholder="••••••••" {...field} /></FormControl><FormMessage />

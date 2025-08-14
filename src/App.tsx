@@ -8,6 +8,7 @@ import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 const Index = lazy(() => import("@/pages/Index"));
 const Login = lazy(() => import("@/pages/Login"));
 const Signup = lazy(() => import("@/pages/Signup"));
+const ForgotPassword = lazy(() => import("@/pages/ForgotPassword")); // Nova importação
 const Profile = lazy(() => import("@/pages/Profile"));
 const AdDetails = lazy(() => import("@/pages/AdDetails"));
 const CategoryPage = lazy(() => import("@/pages/CategoryPage"));
@@ -49,6 +50,7 @@ function App() {
         {/* Rotas de Login e Cadastro fora do Root para uma experiência dedicada */}
         <Route path="login" element={<Login />} />
         <Route path="signup" element={<Signup />} />
+        <Route path="forgot-password" element={<ForgotPassword />} /> {/* Nova rota */}
 
         {/* Admin Routes - Agora são rotas de nível superior */}
         <Route path="admin" element={<AdminProtectedRoute />}>

@@ -23,7 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSession } from "@/contexts/SessionContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -32,7 +31,8 @@ import MultiImageUploader from "@/components/MultiImageUploader";
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-const adFormSchema = z.object({
+// Define o esquema base primeiro
+const baseAdFormSchema = z.object({
   title: z.string().min(5, "O título deve ter pelo menos 5 caracteres."),
   description: z.string().min(10, "A descrição deve ter pelo menos 10 caracteres."),
   price: z.coerce.number().positive("O preço deve ser um valor positivo.").optional(),
@@ -40,13 +40,39 @@ const adFormSchema = z.object({
     .min(1, "Pelo menos uma imagem é obrigatória.")
     .max(MAX_FILES, `Você pode enviar no máximo ${MAX_FILES} imagens.`)
     .refine(files => files.every(file => file.size <= MAX_FILE_SIZE), `Cada arquivo deve ter no máximo 5MB.`),
-  category_slug: z.string({ required_error: "Por favor, selecione uma categoria." }),
+  // category_slug será definido dinamicamente e validado via superRefine
   latitude: z.number().optional(),
   longitude: z.number().optional(),
-}).catchall(z.any());
+}).catchall(z.any()); // Permite campos dinâmicos para metadados
+
+// Aplica superRefine ao esquema base para validações complexas
+const adFormSchema = baseAdFormSchema.superRefine((data, ctx) => {
+  const context = (ctx as any)._root?.options?.context || {};
+  const category = context.categoryConfig || { hasPriceFilter: true, fields: [] };
+
+  // Validação condicional para o preço
+  if (category.hasPriceFilter !== false && (data.price === undefined || data.price === null || data.price <= 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Por favor, insira um preço válido e positivo para esta categoria.",
+      path: ['price'],
+    });
+  }
+
+  // Validação para garantir que uma categoria final foi selecionada
+  if (!data.category_slug) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Por favor, selecione uma categoria.",
+      path: ['category_slug'],
+    });
+  }
+});
+
+type Category = { id: string; name: string; slug: string; custom_fields: any; parent_slug: string | null };
 
 const fetchCategories = async () => {
-  const { data, error } = await supabase.from("categories").select("name, slug, custom_fields").order("name");
+  const { data, error } = await supabase.from("categories").select("name, slug, custom_fields, parent_slug").order("name");
   if (error) throw new Error(error.message);
   return data;
 };
@@ -56,8 +82,10 @@ const CreateAd = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categoryConfig, setCategoryConfig] = useState<any>({ hasPriceFilter: true, fields: [] });
+  const [selectedCategoryPath, setSelectedCategoryPath] = useState<string[]>([]);
+  const [finalCategorySlug, setFinalCategorySlug] = useState<string>('');
 
-  const { data: categories } = useQuery({
+  const { data: allCategories } = useQuery<Category[]>({
     queryKey: ["categories"],
     queryFn: fetchCategories,
   });
@@ -68,7 +96,9 @@ const CreateAd = () => {
       title: "",
       description: "",
       images: [],
+      // category_slug não é um campo direto aqui, mas será definido via setValue
     },
+    context: { categoryConfig }, // Passa categoryConfig para superRefine
   });
 
   useEffect(() => {
@@ -83,17 +113,97 @@ const CreateAd = () => {
     );
   }, [form]);
 
-  const selectedCategorySlug = form.watch("category_slug");
-
+  // Efeito para atualizar finalCategorySlug e categoryConfig com base no caminho selecionado
   useEffect(() => {
-    if (selectedCategorySlug && categories) {
-      const category = categories.find(c => c.slug === selectedCategorySlug);
-      const config = category?.custom_fields || { hasPriceFilter: true, fields: [] };
-      setCategoryConfig(config);
+    if (selectedCategoryPath.length > 0) {
+      const deepestSlug = selectedCategoryPath[selectedCategoryPath.length - 1];
+      setFinalCategorySlug(deepestSlug);
+      const currentCategory = allCategories?.find(c => c.slug === deepestSlug);
+      setCategoryConfig(currentCategory?.custom_fields || { hasPriceFilter: true, fields: [] });
+      // Define o valor do campo 'category_slug' no formulário para validação
+      form.setValue('category_slug', deepestSlug, { shouldValidate: true });
     } else {
+      setFinalCategorySlug('');
       setCategoryConfig({ hasPriceFilter: true, fields: [] });
+      form.setValue('category_slug', '', { shouldValidate: true }); // Garante que o campo esteja vazio se nenhuma categoria for selecionada
     }
-  }, [selectedCategorySlug, categories]);
+  }, [selectedCategoryPath, allCategories, form]);
+
+  // Função para obter categorias filhas de um slug pai
+  const getChildCategories = (parentSlug: string | null) => {
+    return allCategories?.filter(cat => cat.parent_slug === parentSlug) || [];
+  };
+
+  // Renderiza os seletores de categoria dinamicamente
+  const renderCategorySelects = () => {
+    let currentParentSlug: string | null = null;
+    const selects = [];
+
+    // Começa com a categoria principal (parent_slug = null)
+    const initialCategories = getChildCategories(null);
+    if (initialCategories.length === 0 && allCategories && allCategories.length > 0) {
+      // Fallback: se não houver categorias top-level, mas houver categorias,
+      // pode ser um problema de dados ou todas são subcategorias.
+      // Para evitar tela em branco, podemos mostrar todas as categorias como top-level
+      // ou um aviso. Por enquanto, vamos assumir que sempre haverá top-level.
+      // Se não houver nenhuma categoria cadastrada, o seletor ficará vazio.
+    }
+
+    // Loop para renderizar seletores para cada nível
+    for (let i = 0; i <= selectedCategoryPath.length; i++) {
+      const categoriesAtLevel = getChildCategories(currentParentSlug);
+
+      // Se não houver categorias neste nível e não for o primeiro seletor, pare de renderizar
+      if (categoriesAtLevel.length === 0 && i > 0) {
+        break;
+      }
+
+      const level = i;
+      const selectedValue = selectedCategoryPath[level] || '';
+
+      selects.push(
+        <FormField
+          key={`category-level-${level}`}
+          control={form.control}
+          // Usamos um nome de campo dummy para o form.control, pois o valor final é em finalCategorySlug
+          name={`category_level_${level}` as any}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{level === 0 ? "Categoria Principal" : `Subcategoria ${level + 1}`}</FormLabel>
+              <Select
+                onValueChange={(value) => {
+                  const newPath = selectedCategoryPath.slice(0, level);
+                  if (value) {
+                    newPath.push(value);
+                  }
+                  setSelectedCategoryPath(newPath);
+                  // Limpa os valores dos campos subsequentes no formulário
+                  for (let j = level + 1; j < 5; j++) { // Assumindo um máximo de 5 níveis para limpeza
+                    form.setValue(`category_level_${j}` as any, '');
+                  }
+                }}
+                value={selectedValue}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder={level === 0 ? "Selecione a categoria principal" : "Selecione a subcategoria"} />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {categoriesAtLevel.map(cat => (
+                    <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      );
+      currentParentSlug = selectedValue;
+    }
+    return selects;
+  };
 
   async function onSubmit(values: z.infer<typeof adFormSchema>) {
     if (!user) {
@@ -106,11 +216,6 @@ const CreateAd = () => {
     const uploadedImagePaths: string[] = [];
 
     try {
-      const priceToInsert = categoryConfig.hasPriceFilter !== false ? values.price : 0;
-      if (categoryConfig.hasPriceFilter !== false && (priceToInsert === undefined || priceToInsert === null || priceToInsert <= 0)) {
-          throw new Error("Por favor, insira um preço válido e positivo para esta categoria.");
-      }
-
       const imageFiles = values.images;
       
       const uploadPromises = imageFiles.map(file => {
@@ -133,10 +238,12 @@ const CreateAd = () => {
         return supabase.storage.from("advertisements").getPublicUrl(result.data.path).data.publicUrl;
       });
 
-      const standardFields = ['title', 'description', 'price', 'images', 'category_slug', 'latitude', 'longitude'];
+      // Campos padrão que não devem ir para metadata
+      const standardFields = ['title', 'description', 'price', 'images', 'latitude', 'longitude', 'category_slug'];
       const metadata: { [key: string]: any } = {};
       for (const key in values) {
-        if (!standardFields.includes(key) && values[key]) {
+        // Adiciona campos dinâmicos (que não são padrão) ao metadata
+        if (!standardFields.includes(key) && values[key] !== undefined && values[key] !== null && values[key] !== '') {
           metadata[key] = values[key];
         }
       }
@@ -146,14 +253,15 @@ const CreateAd = () => {
         .insert({
           title: values.title,
           description: values.description,
-          price: priceToInsert,
-          category_slug: values.category_slug,
+          price: values.price,
+          category_slug: finalCategorySlug, // Usa a categoria mais específica selecionada
           image_urls: imageUrls,
           user_id: user.id,
           metadata: Object.keys(metadata).length > 0 ? metadata : null,
           latitude: values.latitude,
           longitude: values.longitude,
           status: 'approved',
+          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Define a expiração para 30 dias
         });
 
       if (insertError) throw new Error(`Erro ao criar o anúncio: ${insertError.message}`);
@@ -221,22 +329,15 @@ const CreateAd = () => {
               )}
             />
 
+            {renderCategorySelects()}
+
+            {/* Campo oculto para category_slug para que o Zod possa validá-lo */}
             <FormField
               control={form.control}
               name="category_slug"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Categoria</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue placeholder="Selecione a categoria" /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categories?.map(cat => (
-                        <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <FormItem className="hidden">
+                  <FormControl><Input {...field} value={finalCategorySlug} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}

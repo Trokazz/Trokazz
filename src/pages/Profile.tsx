@@ -20,7 +20,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link, useSearchParams } from "react-router-dom";
-import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Star, Zap, Gem, ShieldCheck } from "lucide-react";
+import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Star, Zap, Gem, ShieldCheck, CalendarX, Bell } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,9 +39,11 @@ import FavoriteAdsList from "@/components/FavoriteAdsList";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import SellerAnalytics from "@/components/SellerAnalytics";
 import OffersTab from "@/components/OffersTab";
-import { isValid } from "date-fns";
+import { isValid, differenceInDays } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import VerificationTab from "@/components/VerificationTab";
+import PushNotificationSettings from "@/components/PushNotificationSettings";
+import BuyCreditsDialog from "@/components/BuyCreditsDialog"; // Importando o componente
 import { getOptimizedImageUrl, safeFormatDate } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -66,7 +68,7 @@ const profileFormSchema = z.object({
   date_of_birth: z.string().optional(),
 });
 
-type UserAd = Advertisement & { status: string; view_count: number; last_renewed_at: string | null; boosted_until: string | null };
+type UserAd = Advertisement & { status: string; view_count: number; last_renewed_at: string | null; boosted_until: string | null; expires_at: string | null; }; // Adicionado expires_at
 
 const fetchProfilePageData = async (userId: string): Promise<ProfilePageData> => {
   const { data, error } = await supabase.rpc('get_profile_page_data', { p_user_id: userId });
@@ -256,6 +258,23 @@ const Profile = () => {
     }
   };
 
+  const handleRenewAd = async (adId: string) => {
+    const toastId = showLoading("Renovando anúncio...");
+    try {
+      const { error } = await supabase
+        .from("advertisements")
+        .update({ expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() }) // Estende por mais 30 dias
+        .eq("id", adId);
+      if (error) throw error;
+      dismissToast(toastId);
+      showSuccess("Anúncio renovado com sucesso por mais 30 dias!");
+      refetch();
+    } catch (error) {
+      dismissToast(toastId);
+      showError(error instanceof Error ? error.message : "Erro ao renovar anúncio.");
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved': return <Badge variant="default" className="bg-green-500">Aprovado</Badge>;
@@ -374,11 +393,11 @@ const Profile = () => {
                   name="service_tags"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tags de Serviço</FormLabel>
-                      <FormControl><Input placeholder="Ex: montador_moveis, eletricista, frete" {...field} value={field.value || ''} /></FormControl>
-                      <FormDescription>
-                        Se você é um prestador de serviço, adicione suas especialidades aqui, separadas por vírgula. Isso ajudará os clientes a te encontrarem.
-                      </FormDescription>
+                          <FormLabel>Tags de Serviço</FormLabel>
+                          <FormControl><Input placeholder="Ex: montador_moveis, eletricista, frete" {...field} value={field.value || ''} /></FormControl>
+                          <FormDescription>
+                            Se você é um prestador de serviço, adicione suas especialidades aqui, separadas por vírgula. Isso ajudará os clientes a te encontrarem.
+                          </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -413,6 +432,7 @@ const Profile = () => {
               <SelectItem value="reviews">Minhas Avaliações</SelectItem>
               <SelectItem value="perfil">Perfil</SelectItem>
               <SelectItem value="verification">Verificação</SelectItem>
+              <SelectItem value="notifications">Notificações</SelectItem>
             </SelectContent>
           </Select>
         ) : (
@@ -425,6 +445,7 @@ const Profile = () => {
               <TabsTrigger value="reviews" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Minhas Avaliações</TabsTrigger>
               <TabsTrigger value="perfil" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Perfil</TabsTrigger>
               <TabsTrigger value="verification" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Verificação</div></TabsTrigger>
+              <TabsTrigger value="notifications" className="h-full rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"><div className="flex items-center gap-2"><Bell className="h-4 w-4" /> Notificações</div></TabsTrigger>
             </TabsList>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
@@ -451,7 +472,7 @@ const Profile = () => {
             <CardContent>
               <div className="space-y-4">
                 {userAds && userAds.length > 0 ? (
-                  userAds.map((ad) => {
+                  userAds.map((ad: UserAd) => { // Tipagem explícita para ad
                     const now = new Date();
                     let isBoosted = false;
                     if (ad.boosted_until) {
@@ -464,6 +485,10 @@ const Profile = () => {
                     const boostCost = parseInt(settings?.boost_price || '25');
                     const userBalance = credits?.balance || 0;
                     const hasEnoughCredits = userBalance >= boostCost;
+
+                    const expiresAtDate = ad.expires_at ? new Date(ad.expires_at) : null;
+                    const isExpired = expiresAtDate ? expiresAtDate <= now : false;
+                    const daysUntilExpiration = expiresAtDate ? differenceInDays(expiresAtDate, now) : null;
 
                     return (
                       <div key={ad.id} className="flex items-center justify-between p-2 border rounded-lg gap-2 flex-wrap">
@@ -480,6 +505,16 @@ const Profile = () => {
                                   <span>{ad.view_count}</span>
                                 </div>
                                 {isBoosted && <Badge className="bg-yellow-400 text-black hover:bg-yellow-500"><Zap className="h-3 w-3 mr-1" />Destaque</Badge>}
+                                {expiresAtDate && (
+                                  <div className="flex items-center gap-1 text-muted-foreground">
+                                    <CalendarX className="h-4 w-4" />
+                                    {isExpired ? (
+                                      <span className="text-red-500">Expirado</span>
+                                    ) : (
+                                      <span>Expira em {daysUntilExpiration} dias</span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </Link>
@@ -559,6 +594,16 @@ const Profile = () => {
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent><p>Marcar como vendido</p></TooltipContent>
+                                </Tooltip>
+                              )}
+                              {(isExpired || (daysUntilExpiration !== null && daysUntilExpiration <= 7)) && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="outline" size="icon" onClick={() => handleRenewAd(ad.id)}>
+                                      <CalendarX className="h-4 w-4 text-blue-500" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p>Renovar anúncio</p></TooltipContent>
                                 </Tooltip>
                               )}
                             </>
@@ -643,6 +688,9 @@ const Profile = () => {
         </TabsContent>
         <TabsContent value="verification">
           <VerificationTab />
+        </TabsContent>
+        <TabsContent value="notifications">
+          <PushNotificationSettings />
         </TabsContent>
 
         <TabsContent value="perfil">
@@ -757,8 +805,7 @@ const Profile = () => {
         </TabsContent>
       </Tabs>
     </div>
-    {/* O componente BuyCreditsDialog foi removido para resolver o erro de CSP. */}
-    {/* <BuyCreditsDialog isOpen={isCreditsDialogOpen} onOpenChange={setIsCreditsDialogOpen} /> */}
+    <BuyCreditsDialog isOpen={isCreditsDialogOpen} onOpenChange={setIsCreditsDialogOpen} />
     </>
   );
 };

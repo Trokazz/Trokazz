@@ -90,6 +90,15 @@ const Signup = () => {
       if (error) throw error;
       if (!data.user) throw new Error("Não foi possível criar o usuário.");
 
+      // Invoca a função de boas-vindas após o cadastro bem-sucedido
+      try {
+        await supabase.functions.invoke('send-welcome-email');
+        console.log('Welcome email function invoked successfully.');
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+        // Não re-lança o erro para não impedir o cadastro, mas registra para depuração.
+      }
+
       dismissToast(toastId);
       showSuccess("Conta criada! Por favor, verifique seu e-mail para confirmar.");
       navigate("/login");

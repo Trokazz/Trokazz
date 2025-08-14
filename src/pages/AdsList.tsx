@@ -24,13 +24,32 @@ interface FilterParams {
   [key: string]: any;
 }
 
+type CategoryData = {
+  name: string;
+  slug: string;
+  custom_fields: any;
+  connected_service_tags: string[] | null;
+  parent_slug: string | null;
+};
+
 const fetchFilteredAds = async (filters: FilterParams) => {
   let query = supabase
     .from("advertisements")
     .select("*, boosted_until", { count: 'exact' })
     .eq('status', 'approved');
 
-  if (filters.categorySlug) query = query.eq("category_slug", filters.categorySlug);
+  if (filters.categorySlug) {
+    // Se for uma categoria principal, buscar anúncios dela e de suas subcategorias
+    const { data: categoriesInScope, error: categoriesError } = await supabase
+      .from('categories')
+      .select('slug')
+      .or(`slug.eq.${filters.categorySlug},parent_slug.eq.${filters.categorySlug}`);
+
+    if (categoriesError) throw categoriesError;
+    const slugsToFilter = categoriesInScope.map(c => c.slug);
+    query = query.in("category_slug", slugsToFilter);
+  }
+
   if (filters.searchTerm) query = query.or(`title.ilike.%${filters.searchTerm}%,description.ilike.%${filters.searchTerm}%`);
   
   const categoryConfig = filters.categoryData?.custom_fields || {};
@@ -62,9 +81,9 @@ const fetchFilteredAds = async (filters: FilterParams) => {
   return { ads: data as Advertisement[], count: count ?? 0 };
 };
 
-const fetchCategoryData = async (slug: string | null) => {
+const fetchCategoryData = async (slug: string | null): Promise<CategoryData | null> => {
   if (!slug) return null;
-  const { data, error } = await supabase.from("categories").select("name, custom_fields, connected_service_tags").eq("slug", slug).single();
+  const { data, error } = await supabase.from("categories").select("name, slug, custom_fields, connected_service_tags, parent_slug").eq("slug", slug).single();
   if (error) {
     if (error.code === 'PGRST116') return null;
     throw error;
@@ -99,7 +118,7 @@ const AdsList = () => {
     return params;
   }, [slug, searchParams]);
 
-  const { data: categoryData, isLoading: isLoadingCategoryData } = useQuery({
+  const { data: categoryData, isLoading: isLoadingCategoryData } = useQuery<CategoryData | null>({
     queryKey: ["categoryData", filters.categorySlug],
     queryFn: () => fetchCategoryData(filters.categorySlug),
     enabled: !!filters.categorySlug,

@@ -7,8 +7,8 @@ import { useSession } from "@/contexts/SessionContext";
 import ActivityFeed from "@/components/ActivityFeed";
 import AdStories from "@/components/AdStories";
 import ErrorState from "@/components/ErrorState";
-// import AdSenseBlock from "@/components/AdSenseBlock"; // Removido
-import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
+import OnboardingCard from "@/components/OnboardingCard"; // Importando o novo componente
+import usePageMetadata from "@/hooks/usePageMetadata";
 
 type GenericAd = Advertisement & { distance?: number };
 
@@ -24,6 +24,33 @@ const fetchUserFavoriteIds = async (userId: string | undefined) => {
   if (error) throw new Error(error.message);
   return data.map(fav => fav.ad_id);
 };
+
+// Nova função para buscar dados do perfil e anúncios do usuário logado
+const fetchProfileAndAdsForOnboarding = async (userId: string | undefined) => {
+  if (!userId) return { profile: null, ads: null };
+
+  const { data: profileData, error: profileError } = await supabase
+    .from("profiles")
+    .select("full_name, username")
+    .eq("id", userId)
+    .single();
+
+  if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = nenhuma linha encontrada
+    throw profileError;
+  }
+
+  const { data: adsData, error: adsError } = await supabase
+    .from("advertisements")
+    .select("id")
+    .eq("user_id", userId);
+
+  if (adsError) {
+    throw adsError;
+  }
+
+  return { profile: profileData, ads: adsData };
+};
+
 
 const AdGrid = ({ ads, favoriteIds }: { ads: GenericAd[], favoriteIds: string[] }) => {
   if (ads.length === 0) {
@@ -71,7 +98,13 @@ const Index = () => {
     enabled: !!user,
   });
 
-  // Adicionando o hook usePageMetadata
+  // Nova query para buscar dados do perfil e anúncios do usuário para o onboarding
+  const { data: userOnboardingData, isLoading: isLoadingUserOnboardingData } = useQuery({
+    queryKey: ["userOnboardingData", user?.id],
+    queryFn: () => fetchProfileAndAdsForOnboarding(user?.id),
+    enabled: !!user, // Apenas executa se o usuário estiver logado
+  });
+
   usePageMetadata({
     title: "Trokazz - Compre, Venda e Troque em Dourados e Região",
     description: "Sua nova forma de negociar. Compre, venda e troque com segurança na maior comunidade de classificados de Dourados e região.",
@@ -88,6 +121,13 @@ const Index = () => {
 
   return (
     <div className="space-y-8">
+      {user && ( // Renderiza o OnboardingCard apenas se o usuário estiver logado
+        <OnboardingCard
+          profile={userOnboardingData?.profile}
+          ads={userOnboardingData?.ads}
+          isLoading={isLoadingUserOnboardingData}
+        />
+      )}
       <AdStories stories={homeData?.stories} isLoading={isLoading} />
       <PromoBanner banners={homeData?.banners} isLoading={isLoading} />
 
@@ -104,7 +144,6 @@ const Index = () => {
 
         <aside className="lg:col-span-1 lg:sticky lg:top-24 space-y-8">
           <ActivityFeed activities={homeData?.activity_feed} isLoading={isLoading} />
-          {/* <AdSenseBlock /> */} {/* Removido */}
         </aside>
       </div>
     </div>
