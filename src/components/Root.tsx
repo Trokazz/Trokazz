@@ -9,6 +9,7 @@ import MaintenancePage from "@/pages/Maintenance";
 import { Skeleton } from "./ui/skeleton";
 import MobileBottomNav from "./MobileBottomNav";
 import PageSkeleton from "./PageSkeleton";
+import PWAInstallPrompt from "./PWAInstallPrompt"; // Importando o novo componente
 
 const fetchSiteSettings = async () => {
   const { data, error } = await supabase.from("site_settings").select("key, value");
@@ -84,6 +85,7 @@ const Root = () => {
         </div>
       </footer>
       <MobileBottomNav />
+      <PWAInstallPrompt /> {/* Adicionando o componente aqui */}
     </div>
   );
 };

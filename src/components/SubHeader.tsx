@@ -6,10 +6,10 @@ import * as Icons from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 
-type Category = { slug: string; name: string; icon: string };
+type Category = { slug: string; name: string; icon: string; parent_slug: string | null };
 
 const fetchCategories = async () => {
-  const { data, error } = await supabase.from("categories").select("slug, name, icon").order("name");
+  const { data, error } = await supabase.from("categories").select("slug, name, icon, parent_slug").order("name");
   if (error) throw new Error(error.message);
   return data;
 };
@@ -42,6 +42,8 @@ const SubHeader = () => {
     queryFn: fetchCategories,
   });
 
+  const topLevelCategories = categories?.filter(cat => !cat.parent_slug) || [];
+
   return (
     <div className="bg-background border-b hidden md:block">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -53,7 +55,7 @@ const SubHeader = () => {
                 <Skeleton className="h-4 w-20" />
               </div>
             ))}
-            {categories?.map((cat: Category) => {
+            {topLevelCategories?.map((cat: Category) => { // Renderiza apenas categorias principais
               const Icon = categoryIconMap[cat.slug] || (Icons as any)[cat.icon] || Icons.HelpCircle;
               const styles = categoryStyles[cat.slug] || categoryStyles.default;
               return (

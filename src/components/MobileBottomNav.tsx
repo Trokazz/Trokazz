@@ -10,8 +10,10 @@ import { useState } from "react";
 import { Input } from "./ui/input";
 import { useSession } from "@/contexts/SessionContext";
 
+type Category = { slug: string; name: string; icon: string; parent_slug: string | null };
+
 const fetchCategories = async () => {
-  const { data, error } = await supabase.from("categories").select("slug, name, icon").order("name");
+  const { data, error } = await supabase.from("categories").select("slug, name, icon, parent_slug").order("name");
   if (error) throw new Error(error.message);
   return data;
 };
@@ -29,10 +31,12 @@ const MobileBottomNav = () => {
   const navigate = useNavigate();
   const { session } = useSession();
 
-  const { data: categories, isLoading: isLoadingCategories } = useQuery({
+  const { data: categories, isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ["categories"],
     queryFn: fetchCategories,
   });
+
+  const topLevelCategories = categories?.filter(cat => !cat.parent_slug) || [];
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +124,7 @@ const MobileBottomNav = () => {
                 <h2 className="mb-2 text-lg font-semibold tracking-tight">Categorias</h2>
                 <div className="space-y-1">
                   {isLoadingCategories && Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
-                  {categories?.map((cat) => {
+                  {topLevelCategories?.map((cat) => { // Renderiza apenas categorias principais
                     const Icon = categoryIconMap[cat.slug] || (Icons as any)[cat.icon] || Icons.HelpCircle;
                     return (
                       <SheetClose asChild key={cat.slug}>

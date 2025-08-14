@@ -117,6 +117,7 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
           price: values.price,
           image_urls: finalImageUrls,
           status: userType === 'user' ? 'approved' : ad.status, // Mantém o status se for admin, re-aprova se for usuário
+          // expires_at não é alterado aqui, apenas na função de renovação
         })
         .eq("id", adId);
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,20 +8,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { showError, showLoading, dismissToast } from "@/utils/toast";
-import { Gem, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useSession } from "@/contexts/SessionContext";
+import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useQuery } from "@tanstack/react-query";
-import { Skeleton } from "./ui/skeleton";
-
-// Declara o objeto Stripe no escopo global para o TypeScript
-declare global {
-  interface Window {
-    Stripe: any;
-  }
-}
+import { Skeleton } from "@/components/ui/skeleton";
+import { Gem, Loader2 } from "lucide-react";
+import { loadStripe } from '@stripe/stripe-js';
 
 interface BuyCreditsDialogProps {
   isOpen: boolean;
@@ -32,60 +26,72 @@ type CreditPackage = {
   amount: number;
   price_in_cents: number;
   description: string | null;
+  is_active: boolean;
 };
 
 const fetchCreditPackages = async (): Promise<CreditPackage[]> => {
   const { data, error } = await supabase
-    .from('credit_packages')
-    .select('*')
-    .eq('is_active', true)
-    .order('price_in_cents', { ascending: true });
-  if (error) throw error;
+    .from("credit_packages")
+    .select("*")
+    .eq("is_active", true)
+    .order("price_in_cents");
+  if (error) throw new Error(error.message);
   return data;
 };
 
-export const BuyCreditsDialog = ({ isOpen, onOpenChange }: BuyCreditsDialogProps) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+// Verifica se a chave pública do Stripe está definida
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
-  const { data: creditPackages, isLoading: isLoadingPackages } = useQuery({
-    queryKey: ['creditPackages'],
+const BuyCreditsDialog = ({ isOpen, onOpenChange }: BuyCreditsDialogProps) => {
+  const { user } = useSession();
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  const { data: packages, isLoading } = useQuery({
+    queryKey: ["creditPackages"],
     queryFn: fetchCreditPackages,
   });
 
-  const handlePurchase = async (selectedPackage: CreditPackage) => {
-    const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-    if (!window.Stripe || !stripePublishableKey) {
-      showError("A integração de pagamento não está configurada corretamente.");
+  const handlePurchase = async (pkg: CreditPackage) => {
+    if (!user) {
+      showError("Você precisa estar logado para comprar créditos.");
+      return;
+    }
+    if (!stripePromise) {
+      showError("A configuração de pagamento não está completa. Por favor, contate o suporte.");
       return;
     }
 
-    setIsSubmitting(true);
-    const toastId = showLoading("Iniciando pagamento seguro...");
+    setIsProcessingPayment(true);
+    const toastId = showLoading("Redirecionando para o pagamento...");
 
     try {
-      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      const { data, error: invokeError } = await supabase.functions.invoke('create-checkout-session', {
         body: {
-          amount: selectedPackage.amount,
-          priceInCents: selectedPackage.price_in_cents,
-          description: selectedPackage.description || `${selectedPackage.amount} Créditos`,
+          amount: pkg.amount,
+          priceInCents: pkg.price_in_cents,
+          description: pkg.description || `Pacote de ${pkg.amount} créditos`,
         },
       });
 
-      if (error) throw error;
-      if (!data || !data.sessionId) throw new Error("ID da sessão de checkout inválido.");
+      if (invokeError) throw invokeError;
+      if (!data?.sessionId) throw new Error("Não foi possível criar a sessão de checkout.");
 
-      const stripe = window.Stripe(stripePublishableKey);
-      dismissToast(toastId);
-      const { error: stripeError } = await stripe.redirectToCheckout({ sessionId: data.sessionId });
-      if (stripeError) throw new Error(stripeError.message);
+      const stripe = await stripePromise;
+      if (!stripe) throw new Error("Falha ao carregar o Stripe.");
 
-    } catch (err: any) {
+      const { error: stripeError } = await stripe.redirectToCheckout({
+        sessionId: data.sessionId,
+      });
+
+      if (stripeError) throw stripeError;
+
+    } catch (error: any) {
       dismissToast(toastId);
-      const errorMessage = err.context?.json?.error || err.message || "Ocorreu um erro desconhecido.";
-      showError(errorMessage);
-      console.error("Detailed payment error object:", err);
+      console.error("Erro ao iniciar pagamento:", error);
+      showError(error.context?.json?.error || error.message || "Não foi possível iniciar o processo de pagamento.");
     } finally {
-      setIsSubmitting(false);
+      setIsProcessingPayment(false);
     }
   };
 
@@ -95,40 +101,42 @@ export const BuyCreditsDialog = ({ isOpen, onOpenChange }: BuyCreditsDialogProps
         <DialogHeader>
           <DialogTitle>Comprar Créditos</DialogTitle>
           <DialogDescription>
-            Use créditos para impulsionar seus anúncios e vender mais rápido.
+            Créditos podem ser usados para impulsionar seus anúncios e destacá-los.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4">
-          {isLoadingPackages ? (
+        <div className="space-y-4 py-4">
+          {isLoading ? (
             Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i} className="p-4"><CardContent className="p-2 text-center"><Skeleton className="h-8 w-8 mx-auto mb-2 rounded-full" /><Skeleton className="h-7 w-12 mx-auto" /><Skeleton className="h-4 w-20 mx-auto mt-1" /><Skeleton className="h-5 w-16 mx-auto mt-2" /><Skeleton className="h-3 w-24 mx-auto mt-1" /></CardContent></Card>
+              <Skeleton key={i} className="h-20 w-full" />
+            ))
+          ) : packages && packages.length > 0 ? (
+            packages.map((pkg) => (
+              <div key={pkg.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <p className="text-lg font-semibold flex items-center gap-2">
+                    <Gem className="h-5 w-5 text-primary" />
+                    {pkg.amount} Créditos
+                  </p>
+                  {pkg.description && <p className="text-sm text-muted-foreground">{pkg.description}</p>}
+                </div>
+                <Button
+                  onClick={() => handlePurchase(pkg)}
+                  disabled={isProcessingPayment || !stripePublishableKey}
+                >
+                  {isProcessingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Comprar por {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(pkg.price_in_cents / 100)}
+                </Button>
+              </div>
             ))
           ) : (
-            creditPackages?.map((pkg) => (
-              <Card
-                key={pkg.id}
-                className="text-center p-4 cursor-pointer hover:shadow-lg hover:border-primary transition-all"
-                onClick={() => !isSubmitting && handlePurchase(pkg)}
-              >
-                <CardContent className="p-2">
-                  <Gem className="h-8 w-8 mx-auto text-primary mb-2" />
-                  <p className="text-2xl font-bold">{pkg.amount}</p>
-                  <p className="text-muted-foreground">Créditos</p>
-                  <p className="font-semibold mt-2">
-                    R$ {(pkg.price_in_cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
-                  {pkg.description && <p className="text-xs text-muted-foreground">{pkg.description}</p>}
-                </CardContent>
-              </Card>
-            ))
+            <p className="text-center text-muted-foreground">Nenhum pacote de créditos disponível no momento.</p>
+          )}
+          {!stripePublishableKey && (
+            <div className="text-center text-red-500 text-sm mt-4">
+              Erro: Chave pública do Stripe não configurada.
+            </div>
           )}
         </div>
-        {isSubmitting && (
-          <div className="flex items-center justify-center text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Aguarde, redirecionando para o pagamento...
-          </div>
-        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
         </DialogFooter>
@@ -136,3 +144,5 @@ export const BuyCreditsDialog = ({ isOpen, onOpenChange }: BuyCreditsDialogProps
     </Dialog>
   );
 };
+
+export default BuyCreditsDialog;
