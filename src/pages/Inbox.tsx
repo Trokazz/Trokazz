@@ -111,7 +111,7 @@ const Inbox = () => {
                 className={`flex items-center gap-4 p-3 rounded-lg transition-colors hover:bg-muted ${isUnread ? 'bg-primary/10' : ''}`}
               >
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 100, height: 100 })} />
+                  <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 100, height: 100 })} loading="lazy" />
                   <AvatarFallback>{getInitials(otherUser.full_name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 overflow-hidden">
@@ -136,6 +136,7 @@ const Inbox = () => {
                     src={getOptimizedImageUrl(adImage, { width: 64, height: 64 })} 
                     alt="Anúncio" 
                     className="w-16 h-16 object-cover rounded-md flex-shrink-0" 
+                    loading="lazy"
                   />
                 )}
               </Link>

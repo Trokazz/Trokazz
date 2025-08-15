@@ -123,7 +123,7 @@ const AdDetails = () => {
                   {ad.image_urls.map((url, index) => (
                     <CarouselItem key={index}>
                       <div className="aspect-square w-full">
-                        <img src={getOptimizedImageUrl(url, { width: 800, height: 800 })} alt={`${ad.title} - Imagem ${index + 1}`} className="w-full h-full object-cover" />
+                        <img src={getOptimizedImageUrl(url, { width: 800, height: 800 })} alt={`${ad.title} - Imagem ${index + 1}`} className="w-full h-full object-cover" loading="lazy" />
                       </div>
                     </CarouselItem>
                   ))}

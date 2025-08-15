@@ -189,7 +189,7 @@ const PublicProfilePage = () => {
     <div className="space-y-8">
       <Card>
         <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-6">
-          <Avatar className="h-24 w-24"><AvatarImage src={getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }) || undefined} /><AvatarFallback>{profile.full_name?.[0] || 'V'}</AvatarFallback></Avatar>
+          <Avatar className="h-24 w-24"><AvatarImage src={getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }) || undefined} loading="lazy" /><AvatarFallback>{profile.full_name?.[0] || 'V'}</AvatarFallback></Avatar>
           <div className="text-center sm:text-left flex-1">
             <div className="flex items-center gap-2 justify-center sm:justify-start">
               <h1 className="text-2xl font-bold">{profile.full_name}</h1>
@@ -219,7 +219,7 @@ const PublicProfilePage = () => {
                     <div key={review.id} className="border-b pb-4">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
-                          <AvatarImage src={getOptimizedImageUrl(review.reviewer?.avatar_url, { width: 100, height: 100 })} />
+                          <AvatarImage src={getOptimizedImageUrl(review.reviewer?.avatar_url, { width: 100, height: 100 })} loading="lazy" />
                           <AvatarFallback>{review.reviewer?.full_name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
                         <div>
