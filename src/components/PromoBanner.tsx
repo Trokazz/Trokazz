@@ -26,7 +26,6 @@ type Banner = {
 
 interface PromoBannerProps {
   banners: Banner[] | null | undefined;
-  isLoading: boolean;
 }
 
 const PromoBanner = ({ banners, isLoading }: PromoBannerProps) => {
@@ -61,6 +60,14 @@ const PromoBanner = ({ banners, isLoading }: PromoBannerProps) => {
                   backgroundImage: optimizedImageUrl ? `url(${optimizedImageUrl})` : 'none'
                 }}
               >
+                {optimizedImageUrl && (
+                  <img
+                    src={optimizedImageUrl}
+                    alt={banner.title}
+                    className="absolute inset-0 w-full h-full object-cover z-0"
+                    loading="lazy"
+                  />
+                )}
                 <div className="absolute inset-0 bg-black/40 z-0" />
                 <div className="relative z-10 text-left max-w-lg">
                   <h2

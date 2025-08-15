@@ -97,7 +97,7 @@ const MultiImageUploader = ({ onChange, maxFiles = 5 }: MultiImageUploaderProps)
         <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
           {previews.map((preview, index) => (
             <div key={index} className="relative group aspect-square">
-              <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover rounded-lg border" />
+              <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover rounded-lg border" loading="lazy" />
               <Button
                 variant="destructive"
                 size="icon"

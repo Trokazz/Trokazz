@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } => "react-router-dom";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -175,7 +175,7 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
               <div className="grid grid-cols-3 gap-4">
                 {existingImages.map(url => (
                   <div key={url} className="relative group">
-                    <img src={url} alt="Imagem do anúncio" className="w-full h-24 object-cover rounded-md" />
+                    <img src={url} alt="Imagem do anúncio" className="w-full h-24 object-cover rounded-md" loading="lazy" />
                     <Button
                       type="button"
                       variant="destructive"

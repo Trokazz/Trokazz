@@ -48,7 +48,7 @@ const ServiceCard = ({ service }: ServiceCardProps) => {
           {service.profiles && (
             <div className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={getOptimizedImageUrl(service.profiles.avatar_url, { width: 80, height: 80 })} />
+                <AvatarImage src={getOptimizedImageUrl(service.profiles.avatar_url, { width: 80, height: 80 })} loading="lazy" />
                 <AvatarFallback>{service.profiles.full_name?.[0] || 'P'}</AvatarFallback>
               </Avatar>
               <span className="text-sm text-muted-foreground">{service.profiles.full_name}</span>
