@@ -74,7 +74,7 @@ const adFormSchema = baseAdFormSchema.superRefine((data, ctx) => {
 type Category = { id: string; name: string; slug: string; custom_fields: any; parent_slug: string | null };
 
 const fetchCategories = async () => {
-  const { data, error } = await supabase.from("categories").select("name, slug, custom_fields, parent_slug").order("name");
+  const { data, error } = await supabase.from("categories").select("id, name, slug, custom_fields, parent_slug").order("name");
   if (error) throw new Error(error.message);
   return data;
 };

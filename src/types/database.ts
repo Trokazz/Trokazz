@@ -41,6 +41,7 @@ export type Advertisement = {
   longitude: number | null;
   flag_reason: string | null;
   profiles?: { full_name: string | null };
+  expires_at?: string | null; // Adicionado para o tipo Advertisement
 };
 
 export type ReputationBadgeType = {
@@ -53,9 +54,15 @@ export type ReputationBadgeType = {
 export type ConversationWithDetails = {
   id: string;
   last_message_at: string;
+  conversation_type: 'ad_chat' | 'wanted_ad_chat';
   advertisements: {
+    id: string; // Adicionado ID
     title: string | null;
     image_urls: string[] | null;
+  } | null;
+  wanted_ads: { // Adicionado ID
+    id: string;
+    title: string | null;
   } | null;
   buyer: Profile | null;
   seller: Profile | null;

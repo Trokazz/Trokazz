@@ -29,44 +29,25 @@ const fetchModerationQueue = async (): Promise<ModerationItem[]> => {
 
   const verificationsPromise = supabase
     .from("verification_requests")
-    .select("*, profiles:user_id(full_name)")
+    .select("*, profiles(full_name)")
     .eq("status", "pending")
     .order("created_at", { ascending: true });
 
-  const { data: reportsData, error: reportsError } = await supabase
+  const reportsPromise = supabase
     .from("reports")
-    .select("*, advertisements(*, profiles(full_name))")
+    .select("id, reason, created_at, reporter_id, advertisements(*, profiles(full_name)), profiles(full_name)")
     .eq("status", "pending")
     .order("created_at", { ascending: true });
 
-  const [adsResult, verificationsResult] = await Promise.all([
-    adsPromise,
-    verificationsPromise,
-  ]);
+  const [adsResult, verificationsResult, reportsResult] = await Promise.all([adsPromise, verificationsPromise, reportsPromise]);
 
   if (adsResult.error) throw adsResult.error;
   if (verificationsResult.error) throw verificationsResult.error;
-  if (reportsError) throw reportsError;
+  if (reportsResult.error) throw reportsResult.error;
 
-  const reporterIds = [...new Set(reportsData.map(r => r.reporter_id).filter(Boolean))];
-  let reporters: { id: string, full_name: string | null }[] = [];
-  if (reporterIds.length > 0) {
-    const { data: reportersData, error: reportersError } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", reporterIds);
-    if (reportersError) throw reportersError;
-    reporters = reportersData;
-  }
-
-  const reportsWithReporters = reportsData.map(report => ({
-    ...report,
-    profiles: reporters.find(p => p.id === report.reporter_id) || null
-  }));
-
-  const ads: ModerationItem[] = (adsResult.data as AdForReview[]).map(item => ({ type: 'ad', data: item }));
-  const verifications: ModerationItem[] = (verificationsResult.data as VerificationRequest[]).map(item => ({ type: 'verification', data: item }));
-  const reports: ModerationItem[] = (reportsWithReporters as Report[]).map(item => ({ type: 'report', data: item }));
+  const ads: ModerationItem[] = adsResult.data.map(item => ({ type: 'ad', data: item }));
+  const verifications: ModerationItem[] = verificationsResult.data.map(item => ({ type: 'verification', data: item as any }));
+  const reports: ModerationItem[] = reportsResult.data.map(item => ({ type: 'report', data: item as any }));
 
   const combined = [...reports, ...verifications, ...ads];
   

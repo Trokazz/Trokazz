@@ -8,10 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { safeFormatDate, safeFormatDistanceToNow } from "@/lib/utils";
-import { User, Newspaper, ShieldAlert, ExternalLink, Handshake, MessagesSquare, Heart, ShieldX, PlusCircle, Ban, CheckCircle } from "lucide-react";
+import { User, Newspaper, ShieldAlert, ExternalLink, Handshake, MessagesSquare, Heart, ShieldX, PlusCircle, Ban, CheckCircle, Gem } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import AddViolationDialog from "@/components/admin/AddViolationDialog";
+import SendCreditsDialog from "@/components/admin/SendCreditsDialog"; // Importado o novo diálogo
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 
 const fetchUserDetailsAndActivity = async (userId: string) => {
@@ -99,12 +100,22 @@ const fetchUserDetailsAndActivity = async (userId: string) => {
     }));
   }
 
-  return { profile, ads, reportsAgainstUser, offers, conversations, favorites, violations };
+  // Adicionado: Busca o saldo de créditos do usuário
+  const { data: creditsData, error: creditsError } = await supabase
+    .from("user_credits")
+    .select("balance")
+    .eq("user_id", userId)
+    .single();
+  if (creditsError && creditsError.code !== 'PGRST116') throw new Error(`Erro ao buscar créditos: ${creditsError.message}`);
+
+
+  return { profile, ads, reportsAgainstUser, offers, conversations, favorites, violations, credits: creditsData || { balance: 0 } };
 };
 
 const UserDetails = () => {
   const { id } = useParams<{ id: string }>();
   const [isViolationDialogOpen, setIsViolationDialogOpen] = useState(false);
+  const [isSendCreditsDialogOpen, setIsSendCreditsDialogOpen] = useState(false); // Novo estado
   const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["userDetails", id],
@@ -190,6 +201,9 @@ const UserDetails = () => {
               <Button onClick={() => setIsViolationDialogOpen(true)} variant="destructive">
                 <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Advertência
               </Button>
+              <Button onClick={() => setIsSendCreditsDialogOpen(true)} variant="secondary"> {/* Novo botão */}
+                <Gem className="mr-2 h-4 w-4" /> Enviar Créditos
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -223,10 +237,10 @@ const UserDetails = () => {
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-            <ShieldX className="h-6 w-6 text-muted-foreground" />
+            <Gem className="h-6 w-6 text-muted-foreground" /> {/* Ícone de créditos */}
             <div>
-              <p className="text-sm text-muted-foreground">Advertências</p>
-              <p className="font-semibold">{data?.violations.length}</p>
+              <p className="text-sm text-muted-foreground">Créditos</p>
+              <p className="font-semibold">{data?.credits?.balance || 0}</p> {/* Exibe o saldo */}
             </div>
           </div>
         </CardContent>
@@ -370,6 +384,14 @@ const UserDetails = () => {
         </TabsContent>
       </Tabs>
       {id && <AddViolationDialog userId={id} isOpen={isViolationDialogOpen} onOpenChange={setIsViolationDialogOpen} />}
+      {id && data?.profile?.full_name && (
+        <SendCreditsDialog
+          userId={id}
+          userName={data.profile.full_name}
+          isOpen={isSendCreditsDialogOpen}
+          onOpenChange={setIsSendCreditsDialogOpen}
+        />
+      )}
     </div>
   );
 };

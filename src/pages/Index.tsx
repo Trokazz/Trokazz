@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import AdCard, { Advertisement } from "@/components/AdCard";
+import AdCard, { Advertisement } from "@/components/AdCard"; // Importa Advertisement do AdCard para o AdGrid
 import { Skeleton } from "@/components/ui/skeleton";
 import PromoBanner from "@/components/PromoBanner";
 import { useSession } from "@/contexts/SessionContext";
@@ -9,6 +9,7 @@ import AdStories from "@/components/AdStories";
 import ErrorState from "@/components/ErrorState";
 import OnboardingCard from "@/components/OnboardingCard"; // Importando o novo componente
 import usePageMetadata from "@/hooks/usePageMetadata";
+import { Profile, Advertisement as FullAdvertisementType } from "@/types/database"; // Importa Profile e Advertisement completo do types/database
 
 type GenericAd = Advertisement & { distance?: number };
 
@@ -31,7 +32,7 @@ const fetchProfileAndAdsForOnboarding = async (userId: string | undefined) => {
 
   const { data: profileData, error: profileError } = await supabase
     .from("profiles")
-    .select("full_name, username")
+    .select("*") // Seleciona todos os campos para corresponder ao tipo Profile
     .eq("id", userId)
     .single();
 
@@ -41,14 +42,14 @@ const fetchProfileAndAdsForOnboarding = async (userId: string | undefined) => {
 
   const { data: adsData, error: adsError } = await supabase
     .from("advertisements")
-    .select("id")
+    .select("id, title, description, price, image_urls, created_at, user_id, category_slug, status, view_count, boosted_until, last_renewed_at, metadata, latitude, longitude, flag_reason, expires_at") // Seleciona todos os campos necessários para FullAdvertisementType
     .eq("user_id", userId);
 
   if (adsError) {
     throw adsError;
   }
 
-  return { profile: profileData, ads: adsData };
+  return { profile: profileData as Profile, ads: adsData as FullAdvertisementType[] };
 };
 
 

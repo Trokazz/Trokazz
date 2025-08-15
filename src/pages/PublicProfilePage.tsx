@@ -35,7 +35,7 @@ const fetchProfileByUsername = async (username: string) => {
       user_badges (
         badges ( id, name, description, icon )
       )
-    `)
+    `) // Revertendo para selecionar todos os campos
     .eq("username", username)
     .single();
   if (error || !data) throw new Error("Perfil não encontrado.");
@@ -207,7 +207,93 @@ const PublicProfilePage = () => {
       <Tabs defaultValue="ads" className="w-full">
         <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="ads">Anúncios ({ads?.length || 0})</TabsTrigger><TabsTrigger value="reviews">Avaliações ({reviews?.length || 0})</TabsTrigger></TabsList>
         <TabsContent value="ads"><div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-6">{isLoadingAds ? <Skeleton className="h-64 w-full col-span-full" /> : ads && ads.length > 0 ? ads.map(ad => <AdCard key={ad.id} ad={ad} />) : <p className="col-span-full text-center text-muted-foreground py-8">Este vendedor não tem anúncios ativos.</p>}</div></TabsContent>
-        <TabsContent value="reviews">{isReviewsError && <div className="text-center py-10 text-red-500">Erro: {reviewsError.message}</div>}{isLoadingReviews && <p>Carregando avaliações...</p>}{reviews && (<div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6"><div className="space-y-6"><h2 className="text-xl font-bold">O que outros compradores dizem</h2>{reviews.length > 0 ? (reviews.map((review) => (<div key={review.id} className="border-b pb-4"><div className="flex items-center gap-3"><Avatar className="h-10 w-10"><AvatarImage src={getOptimizedImageUrl(review.reviewer?.avatar_url, { width: 100, height: 100 })} /><AvatarFallback>{review.reviewer?.full_name?.[0] || 'U'}</AvatarFallback></Avatar><div><p className="font-bold">{review.reviewer?.full_name || 'Usuário'}</p><div className="flex">{[...Array(5)].map((_, i) => <Star key={i} className={`h-5 w-5 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />)}</div></div></div><p className="text-muted-foreground mt-2 pl-12">{review.comment}</p></div>))) : <p className="text-muted-foreground">Este vendedor ainda não recebeu avaliações.</p>}</div>{user && user.id !== profile.id && (<div><Card><CardHeader><CardTitle>Deixar uma avaliação</CardTitle><CardDescription>Compartilhe sua experiência com este vendedor.</CardDescription></CardHeader><CardContent><Form {...reviewForm}><form onSubmit={reviewForm.handleSubmit(onReviewSubmit)} className="space-y-4"><FormField control={reviewForm.control} name="rating" render={({ field }) => (<FormItem><FormLabel>Sua nota</FormLabel><FormControl><div className="flex" onMouseLeave={() => setHoverRating(0)}>{[...Array(5)].map((_, i) => {const ratingValue = i + 1;return (<Star key={ratingValue} className={`h-8 w-8 cursor-pointer transition-colors ${ratingValue <= (hoverRating || field.value) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} onClick={() => field.onChange(ratingValue)} onMouseEnter={() => setHoverRating(ratingValue)} />);})}</div></FormControl><FormMessage /></FormItem>)} /><FormField control={reviewForm.control} name="comment" render={({ field }) => (<FormItem><FormLabel>Seu comentário</FormLabel><FormControl><Textarea placeholder="Descreva como foi sua negociação..." {...field} /></FormControl><FormMessage /></FormItem>)} /><Button type="submit" disabled={reviewForm.formState.isSubmitting}>Enviar Avaliação</Button></form></Form></CardContent></Card></div>)}</div>)}</TabsContent>
+        <TabsContent value="reviews">
+          {isReviewsError && <div className="text-center py-10 text-red-500">Erro: {reviewsError.message}</div>}
+          {isLoadingReviews && <p>Carregando avaliações...</p>}
+          {reviews && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold">O que outros compradores dizem</h2>
+                {reviews.length > 0 ? (
+                  reviews.map((review) => (
+                    <div key={review.id} className="border-b pb-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={getOptimizedImageUrl(review.reviewer?.avatar_url, { width: 100, height: 100 })} />
+                          <AvatarFallback>{review.reviewer?.full_name?.[0] || 'U'}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-bold">{review.reviewer?.full_name || 'Usuário'}</p>
+                          <div className="flex">
+                            {[...Array(5)].map((_, i) => (
+                              <Star key={i} className={`h-5 w-5 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-muted-foreground mt-2 pl-12">{review.comment}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-muted-foreground">Este vendedor ainda não recebeu avaliações.</p>
+                )}
+              </div>
+              {user && user.id !== profile.id && (
+                <div>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Deixar uma avaliação</CardTitle>
+                      <CardDescription>Compartilhe sua experiência com este vendedor.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Form {...reviewForm}>
+                        <form onSubmit={reviewForm.handleSubmit(onReviewSubmit)} className="space-y-4">
+                          <FormField
+                            control={reviewForm.control}
+                            name="rating"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Sua nota</FormLabel>
+                                <FormControl>
+                                  <div className="flex" onMouseLeave={() => setHoverRating(0)}>
+                                    {[...Array(5)].map((_, i) => {
+                                      const ratingValue = i + 1;
+                                      return (
+                                        <Star
+                                          key={ratingValue}
+                                          className={`h-8 w-8 cursor-pointer transition-colors ${ratingValue <= (hoverRating || field.value) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
+                                          onClick={() => field.onChange(ratingValue)}
+                                          onMouseEnter={() => setHoverRating(ratingValue)}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={reviewForm.control}
+                            name="comment"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Seu comentário</FormLabel>
+                                <FormControl><Textarea placeholder="Descreva como foi sua negociação..." {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button type="submit" disabled={reviewForm.formState.isSubmitting}>Enviar Avaliação</Button>
+                        </form>
+                      </Form>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
     </div>
   );

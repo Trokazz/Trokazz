@@ -6,7 +6,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
-import { ConversationWithDetails } from "@/types/database";
+
+// Definindo um tipo mais abrangente para a conversa
+type ConversationWithDetails = {
+  id: string;
+  last_message_at: string;
+  conversation_type: 'ad_chat' | 'wanted_ad_chat'; // Adicionado o tipo de conversa
+  advertisements: {
+    id: string; // Adicionado o ID
+    title: string | null;
+    image_urls: string[] | null;
+  } | null;
+  wanted_ads: { // Adicionado para anúncios de procura
+    id: string; // Adicionado o ID
+    title: string | null;
+  } | null;
+  buyer: { id: string; full_name: string | null; avatar_url: string | null; } | null;
+  seller: { id: string; full_name: string | null; avatar_url: string | null; } | null;
+  messages: {
+    content: string;
+    created_at: string;
+    is_read: boolean;
+    sender_id: string;
+  }[];
+};
 
 const fetchConversations = async (userId: string): Promise<ConversationWithDetails[]> => {
   const { data, error } = await supabase
@@ -14,7 +37,9 @@ const fetchConversations = async (userId: string): Promise<ConversationWithDetai
     .select(`
       id,
       last_message_at,
-      advertisements ( title, image_urls ),
+      conversation_type,
+      advertisements ( id, title, image_urls ),
+      wanted_ads ( id, title ),
       buyer:profiles!conversations_buyer_id_fkey ( id, full_name, avatar_url ),
       seller:profiles!conversations_seller_id_fkey ( id, full_name, avatar_url ),
       messages ( content, created_at, is_read, sender_id )
@@ -67,6 +92,18 @@ const Inbox = () => {
 
             if (!otherUser) return null;
 
+            const adTitle = convo.conversation_type === 'ad_chat' 
+              ? convo.advertisements?.title 
+              : convo.wanted_ads?.title;
+            
+            const adImage = convo.conversation_type === 'ad_chat' 
+              ? convo.advertisements?.image_urls?.[0] 
+              : null; // Anúncios de procura não têm imagem de capa no momento
+
+            const adLink = convo.conversation_type === 'ad_chat' 
+              ? `/anuncio/${convo.advertisements?.id}` 
+              : `/procurados`; // Ou um link específico para o wanted_ad se houver
+
             return (
               <Link
                 key={convo.id}
@@ -85,7 +122,8 @@ const Inbox = () => {
                     </p>
                   </div>
                   <p className="text-sm text-muted-foreground truncate">
-                    Anúncio: {convo.advertisements?.title || 'Anúncio indisponível'}
+                    {convo.conversation_type === 'ad_chat' ? "Anúncio: " : "Procura: "}
+                    {adTitle || 'Indisponível'}
                   </p>
                   {lastMessage && (
                     <p className={`text-sm truncate ${isUnread ? 'font-bold text-foreground' : 'text-muted-foreground'}`}>
@@ -93,6 +131,13 @@ const Inbox = () => {
                     </p>
                   )}
                 </div>
+                {adImage && (
+                  <img 
+                    src={getOptimizedImageUrl(adImage, { width: 64, height: 64 })} 
+                    alt="Anúncio" 
+                    className="w-16 h-16 object-cover rounded-md flex-shrink-0" 
+                  />
+                )}
               </Link>
             );
           })}

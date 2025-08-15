@@ -160,7 +160,7 @@ const AdDetails = () => {
                           Contatar via WhatsApp
                         </Button>
                       )}
-                      <SendMessageButton seller={ad.profiles} adId={ad.id} />
+                      <SendMessageButton targetUser={ad.profiles} adId={ad.id} />
                       <MakeOfferDialog adId={ad.id} sellerId={ad.profiles.id} adTitle={ad.title} />
                     </>
                   )

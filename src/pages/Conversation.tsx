@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom"; // Adicionado useNavigate
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
@@ -10,7 +10,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Send, ArrowLeft, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
-import { showError, showSuccess } from "@/utils/toast";
+import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast"; // Adicionado showLoading e dismissToast
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Adicionado AlertDialog
 
 type Message = {
   id: string;
@@ -24,19 +35,46 @@ type Message = {
   } | null;
 };
 
-const fetchConversationDetails = async (conversationId: string) => {
+// Definindo um tipo mais abrangente para a conversa
+type ConversationDetails = {
+  id: string;
+  conversation_type: 'ad_chat' | 'wanted_ad_chat';
+  advertisements: { // Corrigido para objeto único
+    id: string;
+    title: string | null;
+    image_urls: string[] | null;
+  } | null;
+  wanted_ads: { // Corrigido para objeto único
+    id: string;
+    title: string | null;
+  } | null;
+  buyer: { id: string; full_name: string | null; avatar_url: string | null; } | null;
+  seller: { id: string; full_name: string | null; avatar_url: string | null; } | null;
+};
+
+const fetchConversationDetails = async (conversationId: string): Promise<ConversationDetails | null> => {
   const { data, error } = await supabase
     .from("conversations")
     .select(`
       id,
+      conversation_type,
       advertisements ( id, title, image_urls ),
+      wanted_ads ( id, title ),
       buyer:profiles!conversations_buyer_id_fkey ( id, full_name, avatar_url ),
       seller:profiles!conversations_seller_id_fkey ( id, full_name, avatar_url )
     `)
     .eq("id", conversationId)
     .single();
   if (error) throw error;
-  return data;
+  // Supabase pode retornar um array vazio para relações nulas em vez de null.
+  // Ajustamos o retorno para garantir que seja um objeto ou null.
+  return {
+    ...data,
+    advertisements: data.advertisements && Array.isArray(data.advertisements) ? data.advertisements[0] : data.advertisements,
+    wanted_ads: data.wanted_ads && Array.isArray(data.wanted_ads) ? data.wanted_ads[0] : data.wanted_ads,
+    buyer: data.buyer && Array.isArray(data.buyer) ? data.buyer[0] : data.buyer,
+    seller: data.seller && Array.isArray(data.seller) ? data.seller[0] : data.seller,
+  } as ConversationDetails;
 };
 
 const fetchMessages = async (conversationId: string) => {
@@ -53,7 +91,6 @@ const fetchMessages = async (conversationId: string) => {
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  // Converter para 'unknown' primeiro, conforme sugerido pelo erro TypeScript, resolve a incompatibilidade de tipo complexa.
   return data as unknown as Message[];
 };
 
@@ -61,11 +98,11 @@ const Conversation = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useSession();
   const queryClient = useQueryClient();
+  const navigate = useNavigate(); // Inicializado useNavigate
   const [newMessage, setNewMessage] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Corrigido: HTMLDivVElement para HTMLDivElement
 
-  // Tipando explicitamente os dados como `any` para contornar a inferência incorreta de tipos em tabelas unidas.
-  const { data: conversation, isLoading: isLoadingConvo } = useQuery<any>({
+  const { data: conversation, isLoading: isLoadingConvo } = useQuery<ConversationDetails | null>({
     queryKey: ["conversationDetails", conversationId],
     queryFn: () => fetchConversationDetails(conversationId!),
     enabled: !!conversationId,
@@ -133,10 +170,18 @@ const Conversation = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newMessage.trim() === "" || !user || !conversationId) return;
+    console.log("Tentando enviar mensagem...");
+    console.log("newMessage:", newMessage);
+    console.log("user:", user);
+    console.log("conversationId:", conversationId);
+
+    if (newMessage.trim() === "" || !user || !conversationId) {
+      console.log("Pré-condição falhou: mensagem vazia, usuário ou ID da conversa ausente.");
+      return;
+    }
 
     const content = newMessage.trim();
-    setNewMessage("");
+    setNewMessage(""); // Limpa o input imediatamente
 
     const { error } = await supabase.from("messages").insert({
       conversation_id: conversationId,
@@ -145,8 +190,12 @@ const Conversation = () => {
     });
 
     if (error) {
-      console.error("Error sending message:", error);
-      setNewMessage(content);
+      console.error("Erro ao enviar mensagem para o Supabase:", error);
+      showError("Erro ao enviar mensagem: " + error.message); // Exibe o erro para o usuário
+      setNewMessage(content); // Restaura o conteúdo do input em caso de erro
+    } else {
+      console.log("Mensagem enviada com sucesso para o Supabase.");
+      // A assinatura em tempo real deve lidar com a re-busca e exibição
     }
   };
 
@@ -160,9 +209,45 @@ const Conversation = () => {
     }
   };
 
+  const handleDeleteConversation = async () => {
+    if (!conversationId) return;
+    const toastId = showLoading("Apagando conversa...");
+    try {
+      // As mensagens serão automaticamente deletadas devido à restrição ON DELETE CASCADE
+      const { error } = await supabase.from('conversations').delete().eq('id', conversationId);
+      if (error) throw error;
+      dismissToast(toastId);
+      showSuccess("Conversa apagada com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      navigate("/inbox"); // Redireciona para a caixa de entrada
+    } catch (error) {
+      dismissToast(toastId);
+      showError(error instanceof Error ? error.message : "Não foi possível apagar a conversa.");
+    }
+  };
+
   const otherUser = conversation && user
     ? (conversation.buyer?.id === user.id ? conversation.seller : conversation.buyer)
     : null;
+
+  let displayAdTitle: string;
+  let displayAdLink: string;
+
+  if (conversation) {
+    if (conversation.conversation_type === 'ad_chat') {
+      displayAdTitle = conversation.advertisements?.title || 'Anúncio Removido';
+      displayAdLink = conversation.advertisements?.id ? `/anuncio/${conversation.advertisements.id}` : '/inbox';
+    } else if (conversation.conversation_type === 'wanted_ad_chat') {
+      displayAdTitle = conversation.wanted_ads?.title || 'Procura Removida';
+      displayAdLink = '/procurados'; // Link para a lista de procuras, já que não há página de detalhes
+    } else {
+      displayAdTitle = 'Conversa sobre um item'; // Fallback genérico
+      displayAdLink = '/inbox';
+    }
+  } else {
+    displayAdTitle = 'Conversa'; // Fallback se o objeto de conversa for nulo
+    displayAdLink = '/inbox';
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-150px)] max-w-4xl mx-auto border rounded-lg">
@@ -178,25 +263,42 @@ const Conversation = () => {
             <Skeleton className="h-5 w-32" />
           </div>
         ) : otherUser && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-grow"> {/* Adicionado flex-grow */}
             <Avatar>
               <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 80, height: 80 })} />
               <AvatarFallback>{otherUser.full_name?.[0] || 'U'}</AvatarFallback>
             </Avatar>
             <div>
               <p className="font-semibold">{otherUser.full_name}</p>
-              {conversation?.advertisements?.id ? (
-                <Link to={`/anuncio/${conversation.advertisements.id}`} className="text-xs text-muted-foreground hover:underline">
-                  {conversation?.advertisements?.title || 'Anúncio indisponível'}
-                </Link>
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  {conversation?.advertisements?.title || 'Anúncio indisponível'}
-                </span>
-              )}
+              <Link to={displayAdLink} className="text-xs text-muted-foreground hover:underline">
+                {conversation?.conversation_type === 'ad_chat' ? "Anúncio: " : "Procura: "}
+                {displayAdTitle}
+              </Link>
             </div>
           </div>
         )}
+        {/* Botão de apagar conversa */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="text-destructive ml-auto"> {/* Adicionado ml-auto */}
+              <Trash2 className="h-5 w-5" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta ação não pode ser desfeita. Isso excluirá permanentemente esta conversa e todas as suas mensagens.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteConversation}>
+                Sim, apagar conversa
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
