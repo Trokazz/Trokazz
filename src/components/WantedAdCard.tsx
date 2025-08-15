@@ -4,6 +4,22 @@ import { Link } from "react-router-dom";
 import ContactBuyerButton from "./ContactBuyerButton";
 import { useSession } from "@/contexts/SessionContext";
 import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 export type WantedAd = {
   id: string;
@@ -25,7 +41,22 @@ interface WantedAdCardProps {
 
 const WantedAdCard = ({ ad }: WantedAdCardProps) => {
   const { user } = useSession();
+  const queryClient = useQueryClient();
   const isOwner = user?.id === ad.user_id;
+
+  const handleDeleteWantedAd = async () => {
+    const toastId = showLoading("Apagando anúncio de procura...");
+    try {
+      const { error } = await supabase.from("wanted_ads").delete().eq("id", ad.id);
+      if (error) throw error;
+      dismissToast(toastId);
+      showSuccess("Anúncio de procura apagado com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["wantedAds"] }); // Invalida a query para atualizar a lista
+    } catch (error) {
+      dismissToast(toastId);
+      showError(error instanceof Error ? error.message : "Erro ao apagar anúncio de procura.");
+    }
+  };
 
   return (
     <Card className="flex flex-col h-full">
@@ -73,7 +104,31 @@ const WantedAdCard = ({ ad }: WantedAdCardProps) => {
             </div>
           )}
         </div>
-        {!isOwner && <ContactBuyerButton wantedAd={ad} />}
+        {isOwner ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" className="w-full">
+                <Trash2 className="mr-2 h-4 w-4" /> Apagar Procura
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita. Isso excluirá permanentemente o seu anúncio de procura.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteWantedAd}>
+                  Sim, apagar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : (
+          <ContactBuyerButton wantedAd={ad} />
+        )}
       </CardFooter>
     </Card>
   );

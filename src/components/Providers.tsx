@@ -1,9 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster as Sonner } from "@/components/ui/sonner"; // Renomeado para evitar conflito
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { SessionContextProvider } from "@/contexts/SessionContext"; // Corrigido: SessionProvider para SessionContextProvider
+import { SessionContextProvider } from "@/contexts/SessionContext";
 import { Suspense } from "react";
 import PageSkeleton from "./PageSkeleton";
 
@@ -15,8 +14,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <TooltipProvider>
         <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
           <SessionContextProvider>
-            <Sonner />
-            <Toaster />
+            <Sonner /> {/* Mantém apenas o Sonner para toasts */}
             <Suspense fallback={<PageSkeleton />}>
               {children}
             </Suspense>

@@ -65,7 +65,7 @@ const OnboardingCard = ({ profile, ads, isLoading }: OnboardingCardProps) => {
               <p className="font-semibold">Progresso</p>
               <span className="text-sm">{progressValue}%</span>
             </div>
-            <Progress value={progressValue} className="h-2 bg-primary-foreground/30" indicatorClassName="bg-primary-foreground" />
+            <Progress value={progressValue} className="h-2 bg-primary-foreground/30" />
           </div>
         </div>
 
