@@ -33,6 +33,11 @@ const AdminProtectedRoute = () => {
 
   const isLoading = sessionLoading || (!!user && profileLoading);
 
+  // NOVO LOG: Loga a função do perfil
+  if (!isLoading) {
+    console.log("AdminProtectedRoute: User profile role:", profile?.role);
+  }
+
   if (isLoading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">

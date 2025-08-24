@@ -5,7 +5,11 @@ interface CategoryDistributionChartProps {
   data: { name: string; value: number }[];
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+// Função para gerar uma cor HSL baseada em um índice
+const generateColor = (index: number, total: number) => {
+  const hue = (index * 360) / total; // Distribui os matizes uniformemente
+  return `hsl(${hue}, 70%, 60%)`; // Mantém saturação e luminosidade constantes
+};
 
 const CategoryDistributionChart = ({ data }: CategoryDistributionChartProps) => {
   return (
@@ -22,15 +26,15 @@ const CategoryDistributionChart = ({ data }: CategoryDistributionChartProps) => 
               cy="50%"
               labelLine={false}
               outerRadius={100}
-              fill="#8884d8"
+              fill="#8884d8" // Fallback fill, overridden by Cell colors
               dataKey="value"
               nameKey="name"
             >
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell key={`cell-${index}`} fill={generateColor(index, data.length)} />
               ))}
             </Pie>
-            <Tooltip formatter={(value) => `${value} anúncios`} />
+            <Tooltip formatter={(value) => [`${value} anúncios`, "Anúncios"]} />
             <Legend />
           </PieChart>
         </ResponsiveContainer>

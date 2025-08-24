@@ -12,20 +12,12 @@ import {
 import { Button } from "./ui/button"
 import { Skeleton } from "./ui/skeleton"
 import { getOptimizedImageUrl } from "@/lib/utils"
-
-type Banner = {
-  id: string;
-  title: string;
-  description: string | null;
-  image_url: string;
-  link_url: string | null;
-  button_text: string | null;
-  text_color: string | null;
-  background_color: string | null;
-};
+import { supabase } from "@/integrations/supabase/client"; // Importar supabase
+import { Banner } from "@/types/database"; // Importar Banner do types/database
 
 interface PromoBannerProps {
   banners: Banner[] | null | undefined;
+  isLoading: boolean; // Adicionado isLoading para o componente
 }
 
 const PromoBanner = ({ banners, isLoading }: PromoBannerProps) => {
@@ -50,14 +42,15 @@ const PromoBanner = ({ banners, isLoading }: PromoBannerProps) => {
     >
       <CarouselContent>
         {banners.map((banner) => {
-          const optimizedImageUrl = getOptimizedImageUrl(banner.image_url, { width: 1200, height: 400 });
+          // A função getOptimizedImageUrl agora recebe o caminho relativo e o bucket
+          const optimizedImageUrl = banner.image_url ? getOptimizedImageUrl(banner.image_url, { width: 1200, height: 400 }, 'banners') : undefined;
           return (
             <CarouselItem key={banner.id}>
               <div
                 className="relative rounded-lg overflow-hidden p-8 md:p-12 min-h-[256px] flex items-center bg-cover bg-center"
                 style={{
                   backgroundColor: banner.background_color || '#f1f5f9',
-                  backgroundImage: optimizedImageUrl ? `url(${optimizedImageUrl})` : 'none'
+                  // Remove backgroundImage do style para usar a tag img abaixo
                 }}
               >
                 {optimizedImageUrl && (

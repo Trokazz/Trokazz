@@ -15,7 +15,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
-import { ShieldAlert, CheckCircle } from "lucide-react";
+import { ShieldAlert, CheckCircle, Loader2 } from "lucide-react"; // Importar Loader2
 
 interface ReportAdDialogProps {
   adId: string;
@@ -73,11 +73,12 @@ const ReportAdDialog = ({ adId }: ReportAdDialogProps) => {
     const toastId = showLoading("Enviando denúncia...");
 
     try {
-      const { error } = await supabase.functions.invoke('create-report', {
+      const { data, error } = await supabase.functions.invoke('create-report', {
         body: { adId, reason: finalReason },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error); // Handle function-specific errors
 
       dismissToast(toastId);
       setStep('success');
@@ -129,8 +130,14 @@ const ReportAdDialog = ({ adId }: ReportAdDialogProps) => {
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => handleOpenChange(false)}>Cancelar</Button>
-              <Button onClick={handleSubmit} disabled={isSubmitting || !selectedReason}>
-                {isSubmitting ? "Enviando..." : "Enviar Denúncia"}
+              <Button onClick={handleSubmit} disabled={isSubmitting || !selectedReason || (selectedReason === "other" && otherReason.trim().length < 10)}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...
+                  </>
+                ) : (
+                  "Enviar Denúncia"
+                )}
               </Button>
             </DialogFooter>
           </>

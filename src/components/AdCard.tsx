@@ -9,15 +9,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { showError } from "@/utils/toast";
 import { Badge } from "./ui/badge";
 import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
+import { Advertisement, UserLevelDetails } from "@/types/database"; // Importa Advertisement e UserLevelDetails
 
-export type Advertisement = {
-  id: string;
-  title: string;
-  price: number;
-  image_urls: string[];
-  created_at: string;
-  boosted_until?: string | null;
-};
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import * as Icons from "lucide-react"; // Importar todos os ícones Lucide
 
 interface AdCardProps {
   ad: Advertisement;
@@ -60,6 +59,13 @@ const AdCard = ({ ad, isInitiallyFavorited = false }: AdCardProps) => {
     }
   };
 
+  // Obtém a URL pública da primeira imagem usando o caminho relativo
+  // A função getOptimizedImageUrl agora recebe o caminho relativo e o bucket
+  const optimizedImageUrl = ad.image_urls?.[0] ? getOptimizedImageUrl(ad.image_urls[0], { width: 400, height: 400 }, 'advertisements') : undefined;
+
+  const sellerLevel: UserLevelDetails | null | undefined = ad.profiles?.userLevelDetails;
+  const LevelIcon = sellerLevel?.badge_icon ? (Icons as any)[sellerLevel.badge_icon] || Icons.User : Icons.User;
+
   return (
     <Card className="overflow-hidden transition-shadow hover:shadow-lg h-full flex flex-col group relative">
       <Link to={`/anuncio/${ad.id}`} className="absolute inset-0 z-10" aria-label={ad.title} />
@@ -69,10 +75,23 @@ const AdCard = ({ ad, isInitiallyFavorited = false }: AdCardProps) => {
           Destaque
         </Badge>
       )}
+      {sellerLevel && sellerLevel.level_name !== 'newbie' && ( // Exibe o badge apenas se não for 'newbie'
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className="absolute top-2 right-10 z-20 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50 cursor-help">
+              <LevelIcon className="h-3 w-3 mr-1" />
+              {sellerLevel.level_name}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{sellerLevel.description}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
       <div className="flex flex-col h-full bg-card">
         <CardHeader className="p-0">
           <img
-            src={getOptimizedImageUrl(ad.image_urls?.[0], { width: 400, height: 400 }) || '/placeholder.svg'}
+            src={optimizedImageUrl || '/placeholder.svg'}
             alt={ad.title}
             className="w-full h-48 object-cover"
             loading="lazy"

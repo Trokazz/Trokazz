@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/contexts/SessionContext";
 import { Handshake } from "lucide-react";
@@ -26,8 +28,8 @@ const ContactBuyerButton = ({ wantedAd }: ContactBuyerButtonProps) => {
     <SendMessageButton
       targetUser={targetUser}
       wantedAdId={wantedAd.id} // Passa o ID do anúncio de procura
+      icon={Handshake} // Passa o ícone Handshake
     >
-      <Handshake className="mr-2 h-4 w-4" />
       Eu Tenho!
     </SendMessageButton>
   );

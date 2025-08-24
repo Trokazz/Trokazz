@@ -3,14 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import * as Icons from "lucide-react";
 import { safeFormatDistanceToNow } from "@/lib/utils";
-
-type Activity = {
-  id: number;
-  icon: string | null;
-  message: string;
-  link: string | null;
-  created_at: string;
-};
+import { Activity } from "@/types/database"; // Importar Activity do types/database
 
 interface ActivityFeedProps {
   activities: Activity[] | null | undefined;

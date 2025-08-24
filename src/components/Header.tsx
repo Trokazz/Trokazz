@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Search, MessagesSquare, Rss } from "lucide-react";
+import { Sparkles, Search, MessagesSquare } from "lucide-react";
 import { useSession } from "@/contexts/SessionContext";
 import {
   DropdownMenu,
@@ -13,11 +13,13 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "./ui/skeleton";
-import { Input } from "./ui/input";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import NotificationBell from "./NotificationBell";
 import { getOptimizedImageUrl } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Input } from "@/components/ui/input";
+
 import {
   Tooltip,
   TooltipContent,
@@ -39,6 +41,7 @@ const Header = () => {
   const { session, loading: sessionLoading } = useSession();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const isMobile = useIsMobile();
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["headerProfile", session?.user?.id],
@@ -79,6 +82,8 @@ const Header = () => {
 
   const isLoading = sessionLoading || (!!session && profileLoading);
 
+  const optimizedAvatarUrl = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, { width: 80, height: 80 }, 'avatars') : undefined;
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
@@ -91,7 +96,8 @@ const Header = () => {
           </Link>
         </div>
 
-        <div className="flex-1 w-full max-w-xl hidden md:flex">
+        {/* Search bar always visible, but takes full width on mobile */}
+        <div className="flex-1 w-full max-w-xl md:flex hidden">
           <form onSubmit={handleSearch} className="w-full relative">
             <Input
               type="search"
@@ -105,19 +111,7 @@ const Header = () => {
         </div>
 
         <div className="flex items-center space-x-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button asChild variant="ghost" size="icon">
-                <Link to="/procurados">
-                  <Rss className="h-6 w-6" />
-                  <span className="sr-only">Procurados</span>
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Mural de Procurados</p>
-            </TooltipContent>
-          </Tooltip>
+          {/* O ícone do Mural de Procurados (Rss) foi removido daqui */}
 
           <div className="hidden md:flex items-center space-x-1">
             {session && (
@@ -142,39 +136,55 @@ const Header = () => {
           {isLoading ? (
             <Skeleton className="h-10 w-10 rounded-full" />
           ) : session ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={getOptimizedImageUrl(profile?.avatar_url, { width: 80, height: 80 })} alt={profile?.full_name || "User"} />
-                    <AvatarFallback>{getInitials(profile?.full_name)}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{profile?.full_name || "Usuário"}</p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/perfil")}>Meu Perfil</DropdownMenuItem>
-                {profile?.role === "admin" && (
-                  <DropdownMenuItem onClick={() => navigate("/admin")}>Área Admin</DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>Sair</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            // Condicionalmente renderiza o DropdownMenu do perfil apenas se não for mobile
+            !isMobile && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={optimizedAvatarUrl} alt={profile?.full_name || "User"} />
+                      <AvatarFallback>{getInitials(profile?.full_name)}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{profile?.full_name || "Usuário"}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/perfil")}>Meu Perfil</DropdownMenuItem>
+                  {profile?.role === "admin" && (
+                    <DropdownMenuItem onClick={() => navigate("/admin")}>Área Admin</DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>Sair</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )
           ) : (
-            <Button onClick={() => navigate("/login")} className="hidden md:flex">Entrar</Button>
+            <Button onClick={() => navigate("/auth?tab=login")} className="hidden md:flex">Entrar</Button>
           )}
 
-          <Button onClick={() => navigate("/novo-anuncio")} className="hidden sm:flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-primary-foreground rounded-full px-4">
+          <Button onClick={() => navigate("/novo-anuncio")} className="hidden sm:flex items-center gap-2 bg-olx-orange text-olx-orange-foreground hover:bg-olx-orange-darker rounded-full px-4">
             <Sparkles className="h-5 w-5" />
             Anunciar grátis
           </Button>
         </div>
+      </div>
+      {/* Mobile-only search bar */}
+      <div className="md:hidden px-4 pb-2">
+        <form onSubmit={handleSearch} className="w-full relative">
+          <Input
+            type="search"
+            placeholder="Pesquise qualquer item..."
+            className="w-full pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+        </form>
       </div>
     </header>
   );

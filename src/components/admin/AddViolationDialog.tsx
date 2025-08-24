@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react"; // Importar Loader2
 
 interface AddViolationDialogProps {
   userId: string;
@@ -76,6 +77,7 @@ const AddViolationDialog = ({ userId, isOpen, onOpenChange }: AddViolationDialog
 
       dismissToast(toastId);
       queryClient.invalidateQueries({ queryKey: ["userDetails", userId] });
+      queryClient.invalidateQueries({ queryKey: ["allUsersWithViolations"] }); // Invalidate user list
       onOpenChange(false);
       form.reset();
     } catch (error) {
@@ -111,7 +113,13 @@ const AddViolationDialog = ({ userId, isOpen, onOpenChange }: AddViolationDialog
           <DialogFooter className="mt-4">
             <Button variant="ghost" type="button" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Registrando..." : "Registrar Advertência"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Registrando...
+                </>
+              ) : (
+                "Registrar Advertência"
+              )}
             </Button>
           </DialogFooter>
         </form>

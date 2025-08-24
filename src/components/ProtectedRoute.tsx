@@ -1,9 +1,9 @@
 import React from "react";
 import { useSession } from "@/contexts/SessionContext";
-import { Navigate, useLocation, Outlet } from "react-router-dom"; // Adicionado Outlet
+import { Navigate, useLocation, Outlet } from "react-router-dom";
 import { Skeleton } from "./ui/skeleton";
 
-const ProtectedRoute = () => { // Removido { children }
+const ProtectedRoute = () => {
   const { session, loading } = useSession();
   const location = useLocation();
 
@@ -22,10 +22,10 @@ const ProtectedRoute = () => { // Removido { children }
   }
 
   if (!session) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/auth?tab=login" state={{ from: location }} replace />;
   }
 
-  return <Outlet />; // Renderiza Outlet para rotas aninhadas
+  return <Outlet />;
 };
 
 export default ProtectedRoute;

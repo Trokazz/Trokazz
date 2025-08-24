@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,9 +13,10 @@ interface SendMessageButtonProps {
   adId?: string; // ID do anúncio de venda (opcional)
   wantedAdId?: string; // ID do anúncio de procura (opcional)
   children?: React.ReactNode; // Conteúdo do botão
+  icon?: React.ElementType; // Novo prop para o ícone
 }
 
-const SendMessageButton = ({ targetUser, adId, wantedAdId, children }: SendMessageButtonProps) => {
+const SendMessageButton = ({ targetUser, adId, wantedAdId, children, icon: IconComponent }: SendMessageButtonProps) => {
   const { user } = useSession();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
@@ -107,7 +110,7 @@ const SendMessageButton = ({ targetUser, adId, wantedAdId, children }: SendMessa
 
   return (
     <Button onClick={handleStartChat} disabled={isLoading || !targetUser} className="w-full" size="lg">
-      <MessageCircle className="mr-2 h-5 w-5" />
+      {IconComponent && <IconComponent className="mr-2 h-5 w-5" />}
       {isLoading ? "Iniciando..." : (children || "Enviar Mensagem")}
     </Button>
   );

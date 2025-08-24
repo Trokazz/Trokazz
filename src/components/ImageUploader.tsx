@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, X } from 'lucide-react';
 import { Button } from './ui/button';
@@ -6,18 +6,33 @@ import { Button } from './ui/button';
 interface ImageUploaderProps {
   onFileChange: (file: File | null) => void;
   title: string;
+  initialImageUrl?: string; // Novo prop para a URL da imagem inicial
 }
 
-const ImageUploader = ({ onFileChange, title }: ImageUploaderProps) => {
-  const [preview, setPreview] = useState<string | null>(null);
+const ImageUploader = ({ onFileChange, title, initialImageUrl }: ImageUploaderProps) => {
+  const [preview, setPreview] = useState<string | null>(initialImageUrl || null);
+
+  useEffect(() => {
+    // Atualiza o preview se initialImageUrl mudar e não houver um arquivo novo selecionado
+    if (initialImageUrl && !preview) {
+      setPreview(initialImageUrl);
+    } else if (!initialImageUrl && preview && !preview.startsWith('blob:')) {
+      // Se initialImageUrl for removido e o preview não for um blob (novo arquivo), limpa
+      setPreview(null);
+    }
+  }, [initialImageUrl, preview]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles && acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
+      // Revoga a URL do preview anterior se for um blob
+      if (preview && preview.startsWith('blob:')) {
+        URL.revokeObjectURL(preview);
+      }
       setPreview(URL.createObjectURL(file));
       onFileChange(file);
     }
-  }, [onFileChange]);
+  }, [onFileChange, preview]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -26,7 +41,7 @@ const ImageUploader = ({ onFileChange, title }: ImageUploaderProps) => {
   });
 
   const handleRemove = () => {
-    if (preview) {
+    if (preview && preview.startsWith('blob:')) {
       URL.revokeObjectURL(preview);
     }
     setPreview(null);

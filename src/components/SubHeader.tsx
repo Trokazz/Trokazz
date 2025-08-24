@@ -5,11 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import * as Icons from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
+import { getOptimizedImageUrl } from "@/lib/utils"; // Importar getOptimizedImageUrl
 
-type Category = { slug: string; name: string; icon: string; parent_slug: string | null };
+// Atualizado: Adicionado image_url à Category
+type Category = { slug: string; name: string; icon: string; parent_slug: string | null; image_url: string | null };
 
 const fetchCategories = async () => {
-  const { data, error } = await supabase.from("categories").select("slug, name, icon, parent_slug").order("name");
+  // Atualizado: Selecionar a nova coluna image_url
+  const { data, error } = await supabase.from("categories").select("slug, name, icon, parent_slug, image_url").order("name");
   if (error) throw new Error(error.message);
   return data;
 };
@@ -19,6 +22,14 @@ const categoryIconMap: { [key: string]: React.ElementType } = {
   'para-sua-casa': Icons.Armchair,
   'utilidade-publica': Icons.Siren,
   'beleza': Icons.Wand2,
+  'agro-e-industria': Icons.Factory,
+  'doacao-e-ajuda': Icons.HeartHandshake,
+  'eletronicos-e-celulares': Icons.Smartphone,
+  'gastronomia': Icons.Utensils,
+  'servicos': Icons.Wrench,
+  'vagas-de-emprego': Icons.Briefcase,
+  'veiculos': Icons.Car,
+  // Adicione mais mapeamentos conforme necessário
 };
 
 const categoryStyles: { [key: string]: { bg: string; text: string; hoverBg: string } } = {
@@ -58,6 +69,10 @@ const SubHeader = () => {
             {topLevelCategories?.map((cat: Category) => { // Renderiza apenas categorias principais
               const Icon = categoryIconMap[cat.slug] || (Icons as any)[cat.icon] || Icons.HelpCircle;
               const styles = categoryStyles[cat.slug] || categoryStyles.default;
+              
+              // NOVO: Usar image_url se disponível, caso contrário, usar o ícone
+              const imageUrl = cat.image_url ? getOptimizedImageUrl(cat.image_url, { width: 64, height: 64, resize: 'cover' }, 'category_images') : undefined;
+
               return (
                 <Link
                   key={cat.slug}
@@ -65,13 +80,17 @@ const SubHeader = () => {
                   className="group flex flex-col items-center justify-start gap-2 text-center w-24"
                 >
                   <div className={cn(
-                    "flex items-center justify-center h-16 w-16 rounded-full transition-all duration-300 ease-in-out group-hover:shadow-md group-hover:scale-105",
-                    styles.bg,
-                    styles.hoverBg
+                    "flex items-center justify-center h-16 w-16 rounded-full transition-all duration-300 ease-in-out group-hover:shadow-md group-hover:scale-105 overflow-hidden",
+                    !imageUrl && styles.bg, // Aplica background color apenas se não houver imagem
+                    !imageUrl && styles.hoverBg
                   )}>
-                    <Icon className={cn("h-8 w-8 flex-shrink-0", styles.text)} />
+                    {imageUrl ? (
+                      <img src={imageUrl} alt={cat.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Icon className={cn("h-8 w-8 flex-shrink-0", styles.text)} />
+                    )}
                   </div>
-                  <span className="text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors duration-300 whitespace-normal leading-tight">
+                  <span className="text-xs font-medium text-muted-foreground group-hover:text-primary transition-colors duration-300 whitespace-normal leading-tight line-clamp-2 overflow-hidden text-ellipsis">
                     {cat.name}
                   </span>
                 </Link>

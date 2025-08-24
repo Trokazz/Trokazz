@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
-import { Tag } from "lucide-react";
+import { Tag, Loader2 } from "lucide-react"; // Importar Loader2
 
 interface MakeOfferDialogProps {
   adId: string;
@@ -96,7 +96,13 @@ const MakeOfferDialog = ({ adId, sellerId, adTitle }: MakeOfferDialogProps) => {
           <DialogFooter className="mt-4">
             <Button variant="ghost" type="button" onClick={() => setIsOpen(false)}>Cancelar</Button>
             <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? "Enviando..." : "Enviar Oferta"}
+              {form.formState.isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...
+                </>
+              ) : (
+                "Enviar Oferta"
+              )}
             </Button>
           </DialogFooter>
         </form>

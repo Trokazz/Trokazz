@@ -20,13 +20,22 @@ import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react"; // Importar Loader2
+import { getRelativePathFromUrlOrPath } from "@/lib/utils"; // Importar a nova função
+import MultiImageUploader from "./MultiImageUploader"; // Importar MultiImageUploader
+
+const MAX_FILES = 5;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const adFormSchema = z.object({
   title: z.string().min(5, "O título deve ter pelo menos 5 caracteres."),
   description: z.string().min(10, "A descrição deve ter pelo menos 10 caracteres."),
   price: z.coerce.number().positive("O preço deve ser um valor positivo."),
-  new_images: z.instanceof(FileList).optional(),
+  // Alterado para aceitar File ou string (para caminhos de imagens existentes)
+  images: z.array(z.union([z.instanceof(File), z.string()]))
+    .min(1, "Pelo menos uma imagem é obrigatória.")
+    .max(MAX_FILES, `Você pode ter no máximo ${MAX_FILES} imagens.`)
+    .refine(files => files.every(file => typeof file === 'string' || file.size <= MAX_FILE_SIZE), `Cada arquivo deve ter no máximo 5MB.`),
 });
 
 const fetchAd = async (id: string) => {
@@ -44,8 +53,6 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [existingImages, setExistingImages] = useState<string[]>([]);
-  const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
 
   const { data: ad, isLoading } = useQuery({
     queryKey: ["adDataForEdit", adId],
@@ -63,61 +70,70 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
         title: ad.title,
         description: ad.description,
         price: ad.price,
+        // Converte as URLs públicas existentes para caminhos relativos para o MultiImageUploader
+        images: ad.image_urls.map(url => getRelativePathFromUrlOrPath(url, 'advertisements')),
       });
-      setExistingImages(ad.image_urls || []);
     }
   }, [ad, form]);
 
-  const handleImageDelete = (imageUrl: string) => {
-    setImagesToDelete(prev => [...prev, imageUrl]);
-    setExistingImages(prev => prev.filter(url => url !== imageUrl));
-  };
-
   async function onSubmit(values: z.infer<typeof adFormSchema>) {
-    const newImageFiles = values.new_images ? Array.from(values.new_images) : [];
-    const finalImageCount = existingImages.length + newImageFiles.length;
-
-    if (finalImageCount === 0) {
-      showError("O anúncio deve ter pelo menos uma imagem.");
-      return;
-    }
-    if (finalImageCount > 5) {
-      showError("Você pode ter no máximo 5 imagens no total.");
-      return;
-    }
-
     const toastId = showLoading("Atualizando anúncio...");
     setIsSubmitting(true);
+
+    const currentImagePaths: string[] = [];
+    const newImageFiles: File[] = [];
+    const uploadedNewImagePaths: string[] = []; // Para rastrear uploads bem-sucedidos para limpeza
+
+    // Separa as imagens em novas (File) e existentes (string)
+    values.images.forEach(image => {
+      if (typeof image === 'string') {
+        currentImagePaths.push(image); // Caminho relativo existente
+      } else {
+        newImageFiles.push(image); // Novo arquivo a ser enviado
+      }
+    });
+
+    // Identifica imagens a serem deletadas (estavam no `ad.image_urls` original mas não estão mais em `currentImagePaths`)
+    const originalImagePaths = ad?.image_urls.map(url => getRelativePathFromUrlOrPath(url, 'advertisements')) || [];
+    const imagesToDelete = originalImagePaths.filter(path => !currentImagePaths.includes(path));
+
     try {
+      // 1. Deleta imagens removidas
       if (imagesToDelete.length > 0) {
-        const imagePaths = imagesToDelete.map(url => url.split("/advertisements/")[1]).filter(Boolean);
-        if (imagePaths.length > 0) {
-          const { error: deleteError } = await supabase.storage.from("advertisements").remove(imagePaths);
-          if (deleteError) throw new Error(`Erro ao deletar imagens: ${deleteError.message}`);
-        }
+        const { error: deleteError } = await supabase.storage.from("advertisements").remove(imagesToDelete);
+        if (deleteError) console.error("Erro ao deletar imagens antigas:", deleteError.message);
       }
 
-      const newImageUrls: string[] = [];
+      // 2. Faz upload de novas imagens
       if (newImageFiles.length > 0) {
         for (const imageFile of newImageFiles) {
-          const fileName = `${ad.user_id}/${Date.now()}-${imageFile.name}`;
+          const fileName = `${ad.user_id}/${Date.now()}-${Math.random()}-${imageFile.name}`;
           const { error: uploadError } = await supabase.storage.from("advertisements").upload(fileName, imageFile);
-          if (uploadError) throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
-          const { data: { publicUrl } } = supabase.storage.from("advertisements").getPublicUrl(fileName);
-          newImageUrls.push(publicUrl);
+          if (uploadError) throw new Error(`Erro no upload da nova imagem: ${uploadError.message}`);
+          uploadedNewImagePaths.push(fileName); // Rastreia para limpeza
         }
       }
 
-      const finalImageUrls = [...existingImages, ...newImageUrls];
+      // 3. Combina todos os caminhos de imagem (existentes + novos uploads) na ordem atual do formulário
+      const finalImageUrls = values.images.map(item => {
+        if (typeof item === 'string') {
+          return item; // É um caminho existente
+        } else {
+          // Encontra o caminho correspondente para o arquivo recém-enviado
+          const uploadedPath = uploadedNewImagePaths.find(path => path.includes(item.name));
+          if (!uploadedPath) throw new Error(`Caminho de upload não encontrado para o arquivo: ${item.name}`);
+          return uploadedPath;
+        }
+      });
+
       const { error } = await supabase
         .from("advertisements")
         .update({
           title: values.title,
           description: values.description,
           price: values.price,
-          image_urls: finalImageUrls,
+          image_urls: finalImageUrls, // Salva a lista final e ordenada de caminhos relativos
           status: userType === 'user' ? 'approved' : ad.status, // Mantém o status se for admin, re-aprova se for usuário
-          // expires_at não é alterado aqui, apenas na função de renovação
         })
         .eq("id", adId);
 
@@ -134,6 +150,10 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
         navigate("/perfil");
       }
     } catch (error) {
+      // Em caso de erro, tenta remover as imagens que foram recém-enviadas
+      if (uploadedNewImagePaths.length > 0) {
+         await supabase.storage.from("advertisements").remove(uploadedNewImagePaths).catch(e => console.error("Erro ao limpar imagens após falha:", e));
+      }
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Ocorreu um erro.");
     } finally {
@@ -170,32 +190,26 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormItem>
-              <FormLabel>Imagens do Anúncio</FormLabel>
-              <div className="grid grid-cols-3 gap-4">
-                {existingImages.map(url => (
-                  <div key={url} className="relative group">
-                    <img src={url} alt="Imagem do anúncio" className="w-full h-24 object-cover rounded-md" loading="lazy" />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => handleImageDelete(url)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <FormControl>
-                <Input type="file" accept="image/*" multiple {...form.register("new_images")} />
-              </FormControl>
-              <FormDescription>
-                Você pode remover imagens existentes e adicionar novas (máximo 5 no total).
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
+            <FormField
+              control={form.control}
+              name="images"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Imagens do Anúncio</FormLabel>
+                  <FormControl>
+                    <MultiImageUploader
+                      onChange={field.onChange}
+                      maxFiles={MAX_FILES}
+                      initialImageUrls={ad?.image_urls.map(url => getRelativePathFromUrlOrPath(url, 'advertisements')) || []}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    A primeira imagem será a capa do seu anúncio. Arraste para reordenar.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="title"
@@ -231,7 +245,13 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
             />
             <div className="flex gap-2">
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Salvando..." : "Salvar Alterações"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                  </>
+                ) : (
+                  "Salvar Alterações"
+                )}
               </Button>
               <Button type="button" variant="outline" onClick={() => navigate(userType === 'admin' ? '/admin/ads' : '/perfil')}>
                 Cancelar

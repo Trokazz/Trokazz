@@ -21,7 +21,7 @@ type AdForReview = {
   title: string;
   description: string | null;
   price: number;
-  image_urls: string[];
+  image_urls: string[]; // Agora armazena caminhos relativos
   created_at: string;
   category_slug: string | null;
   user_id: string | null;
@@ -102,10 +102,10 @@ const AdQuickViewDialog = ({ ad, reportId, isOpen, onOpenChange, onUpdateAdStatu
           <div className="space-y-4">
             <Carousel className="w-full">
               <CarouselContent>
-                {ad.image_urls.map((url, index) => (
+                {ad.image_urls.map((url, index) => ( // url aqui é o caminho relativo
                   <CarouselItem key={index}>
                     <div className="aspect-square w-full bg-muted rounded-lg">
-                      <img src={getOptimizedImageUrl(url, { width: 600, height: 600 })} alt={`${ad.title} - Imagem ${index + 1}`} className="w-full h-full object-cover rounded-lg" />
+                      <img src={getOptimizedImageUrl(url, { width: 600, height: 600 }, 'advertisements')} alt={`${ad.title} - Imagem ${index + 1}`} className="w-full h-full object-cover rounded-lg" />
                     </div>
                   </CarouselItem>
                 ))}

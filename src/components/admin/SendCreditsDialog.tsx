@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react"; // Importar Loader2
 
 interface SendCreditsDialogProps {
   userId: string;
@@ -112,7 +113,13 @@ const SendCreditsDialog = ({ userId, userName, isOpen, onOpenChange }: SendCredi
           <DialogFooter>
             <Button variant="ghost" type="button" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Enviando..." : "Enviar Créditos"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...
+                </>
+              ) : (
+                "Enviar Créditos"
+              )}
             </Button>
           </DialogFooter>
         </form>

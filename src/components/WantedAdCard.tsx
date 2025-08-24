@@ -28,7 +28,9 @@ export type WantedAd = {
   budget: number | null;
   created_at: string;
   user_id: string;
+  category_slug: string;
   profiles: {
+    id: string; // Added 'id' here
     full_name: string | null;
     avatar_url: string | null;
     username: string | null;
@@ -51,7 +53,7 @@ const WantedAdCard = ({ ad }: WantedAdCardProps) => {
       if (error) throw error;
       dismissToast(toastId);
       showSuccess("Anúncio de procura apagado com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["wantedAds"] }); // Invalida a query para atualizar a lista
+      queryClient.invalidateQueries({ queryKey: ["wantedAds"] });
     } catch (error) {
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Erro ao apagar anúncio de procura.");
@@ -61,7 +63,7 @@ const WantedAdCard = ({ ad }: WantedAdCardProps) => {
   return (
     <Card className="flex flex-col h-full">
       <CardHeader>
-        <CardTitle>{ad.title}</CardTitle>
+        <CardTitle className="text-xl font-semibold truncate">{ad.title}</CardTitle>
         <CardDescription>
           Procurando em <span className="font-semibold text-primary">Dourados, MS</span>
         </CardDescription>
@@ -79,7 +81,7 @@ const WantedAdCard = ({ ad }: WantedAdCardProps) => {
           {ad.profiles?.username ? (
             <Link to={`/loja/${ad.profiles.username}`} className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={getOptimizedImageUrl(ad.profiles?.avatar_url, { width: 64, height: 64 })} />
+                <AvatarImage src={getOptimizedImageUrl(ad.profiles?.avatar_url, { width: 64, height: 64 }, 'avatars')} />
                 <AvatarFallback>{ad.profiles?.full_name?.[0] || 'U'}</AvatarFallback>
               </Avatar>
               <div>
@@ -92,7 +94,7 @@ const WantedAdCard = ({ ad }: WantedAdCardProps) => {
           ) : (
             <div className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={getOptimizedImageUrl(ad.profiles?.avatar_url, { width: 64, height: 64 })} />
+                <AvatarImage src={getOptimizedImageUrl(ad.profiles?.avatar_url, { width: 64, height: 64 }, 'avatars')} />
                 <AvatarFallback>{ad.profiles?.full_name?.[0] || 'U'}</AvatarFallback>
               </Avatar>
               <div>

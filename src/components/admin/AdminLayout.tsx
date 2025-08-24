@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import { Link } from "react-router-dom";
+import AdminNotificationBell from "./AdminNotificationBell"; // Importar o novo componente
 
 const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -11,10 +12,10 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
         <AdminSidebar />
       </div>
       <div className="flex flex-col">
-        <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 md:hidden">
+        <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4"> {/* Removido md:hidden para que o cabeçalho seja sempre visível */}
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="shrink-0">
+              <Button variant="outline" size="icon" className="shrink-0 md:hidden"> {/* Botão de menu apenas em mobile */}
                 <Menu className="h-5 w-5" />
                 <span className="sr-only">Toggle navigation menu</span>
               </Button>
@@ -23,12 +24,13 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
               <AdminSidebar />
             </SheetContent>
           </Sheet>
-          <div className="w-full flex-1">
+          <div className="w-full flex-1 flex justify-between items-center"> {/* Adicionado flex justify-between */}
             <Link to="/admin">
               <h1 className="font-bold text-lg">
                 Admin <span className="bg-gradient-to-r from-primary to-accent-gradient text-transparent bg-clip-text">Trokazz</span>
               </h1>
             </Link>
+            <AdminNotificationBell /> {/* Adicionado o sino de notificações aqui */}
           </div>
         </header>
         <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-muted/40">

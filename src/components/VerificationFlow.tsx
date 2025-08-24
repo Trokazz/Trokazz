@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, ArrowLeft, Send, ShieldCheck, FileText, Camera } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Send, ShieldCheck, FileText, Camera, Loader2 } from 'lucide-react';
 import ImageUploader from './ImageUploader';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/integrations/supabase/client';
-import { showLoading, showSuccess, showError, dismissToast } from '@/utils/toast';
+import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useQueryClient } from '@tanstack/react-query';
 
 interface VerificationFlowProps {
@@ -47,34 +47,74 @@ const VerificationFlow = ({ isOpen, onOpenChange }: VerificationFlowProps) => {
     let selfiePath: string | null = null;
 
     try {
+      console.log("VerificationFlow: Iniciando upload de documentos...");
       const docFileExt = documentFile.name.split('.').pop();
       docPath = `${user.id}/${Date.now()}-document.${docFileExt}`;
       const { error: docError } = await supabase.storage.from("verification-documents").upload(docPath, documentFile, { upsert: true });
       if (docError) throw new Error(`Erro no upload do documento: ${docError.message}`);
+      console.log("VerificationFlow: Documento enviado para:", docPath);
 
       const selfieFileExt = selfieFile.name.split('.').pop();
       selfiePath = `${user.id}/${Date.now()}-selfie.${selfieFileExt}`;
       const { error: selfieError } = await supabase.storage.from("verification-documents").upload(selfiePath, selfieFile, { upsert: true });
       if (selfieError) throw new Error(`Erro no upload da selfie: ${selfieError.message}`);
+      console.log("VerificationFlow: Selfie enviada para:", selfiePath);
 
-      const { error: insertError } = await supabase.from("verification_requests").insert({
+      console.log("VerificationFlow: Inserindo solicitação de verificação no banco de dados...");
+      const { data: insertData, error: insertError } = await supabase.from("verification_requests").insert({
         user_id: user.id,
         status: 'pending',
-        document_urls: { document: docPath, selfie: selfiePath },
+        document_urls: { document: docPath, selfie: selfiePath }, // Armazena caminhos relativos
+      }).select(); // Adicionado .select() para obter os dados inseridos
+
+      if (insertError) {
+        console.error("VerificationFlow: Supabase insert error for verification_requests:", JSON.stringify(insertError, null, 2));
+        throw new Error(`Erro ao registrar solicitação: ${insertError.message || JSON.stringify(insertError)}`);
+      }
+      // Verifica se algum dado foi realmente retornado após a inserção
+      if (!insertData || insertData.length === 0) {
+          throw new Error("Falha ao registrar solicitação: Nenhum dado retornado após a inserção.");
+      }
+      console.log("VerificationFlow: Solicitação de verificação inserida com sucesso. Data:", insertData);
+
+      console.log("VerificationFlow: Buscando nome do perfil para notificação...");
+      const { data: profileData, error: profileError } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+      const userName = profileData?.full_name || 'Um usuário';
+      console.log("VerificationFlow: Nome do usuário para notificação:", userName);
+
+      console.log("VerificationFlow: Invocando Edge Function para notificação de admin...");
+      const { error: adminNotifInvokeError } = await supabase.functions.invoke('create-admin-notification', {
+        body: {
+          message: `${userName} enviou uma nova solicitação de verificação.`,
+          link: `/admin/moderation-center`, // Link direto para a central de moderação
+          type: 'new_verification',
+        },
       });
-      if (insertError) throw new Error(`Erro ao registrar solicitação: ${insertError.message}`);
+      if (adminNotifInvokeError) {
+        console.error('VerificationFlow: Erro ao invocar Edge Function para notificação de admin:', adminNotifInvokeError);
+        // Não lança o erro, mas registra para depuração.
+      }
+      console.log("VerificationFlow: Edge Function de notificação de admin invocada.");
+
+      console.log("VerificationFlow: Invalidando queries para atualização da UI...");
+      queryClient.invalidateQueries({ queryKey: ["verificationStatus", user.id] });
+      queryClient.invalidateQueries({ queryKey: ["moderationQueue"] }); // Invalida a fila de moderação do admin
+      queryClient.invalidateQueries({ queryKey: ["adminStats"] }); // Invalida as estatísticas do admin
+      console.log("VerificationFlow: Queries invalidadas.");
 
       dismissToast(toastId);
       showSuccess("Documentos enviados! Nossa equipe irá analisar em breve.");
-      queryClient.invalidateQueries({ queryKey: ["verificationStatus", user.id] });
       handleClose(false);
     } catch (err) {
-      if (docPath) await supabase.storage.from("verification-documents").remove([docPath]);
-      if (selfiePath) await supabase.storage.from("verification-documents").remove([selfiePath]);
+      console.error("VerificationFlow: Erro durante o processo de envio:", err);
+      // Em caso de erro, tenta remover os arquivos recém-enviados do storage
+      if (docPath) await supabase.storage.from("verification-documents").remove([docPath]).catch(e => console.error("Erro ao limpar documento após falha:", e));
+      if (selfiePath) await supabase.storage.from("verification-documents").remove([selfiePath]).catch(e => console.error("Erro ao limpar selfie após falha:", e));
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro desconhecido.");
     } finally {
       setIsSubmitting(false);
+      console.log("VerificationFlow: Processo de envio finalizado.");
     }
   };
 
@@ -140,7 +180,14 @@ const VerificationFlow = ({ isOpen, onOpenChange }: VerificationFlowProps) => {
           )}
           {step === 4 && (
             <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? "Enviando..." : "Enviar para Análise"} <Send className="ml-2 h-4 w-4" />
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...
+                </>
+              ) : (
+                "Enviar para Análise"
+              )}
+              <Send className="ml-2 h-4 w-4" />
             </Button>
           )}
         </DialogFooter>

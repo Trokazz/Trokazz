@@ -2,14 +2,8 @@ import { Link } from "react-router-dom";
 import { Skeleton } from "./ui/skeleton";
 import { ScrollArea, ScrollBar } from "./ui/scroll-area";
 import { getOptimizedImageUrl } from "@/lib/utils";
-
-type AdStory = {
-  id: string;
-  title: string;
-  image_urls: string[];
-  category_name: string;
-  category_slug: string;
-};
+import { supabase } from "@/integrations/supabase/client";
+import { AdStory } from "@/types/database";
 
 interface AdStoriesProps {
   stories: AdStory[] | null | undefined;
@@ -23,9 +17,9 @@ const AdStories = ({ stories, isLoading }: AdStoriesProps) => {
         <ScrollArea className="w-full whitespace-nowrap">
           <div className="flex w-max space-x-4 pb-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="flex flex-col items-center gap-2 w-20">
-                <Skeleton className="h-20 w-20 rounded-full" />
-                <Skeleton className="h-4 w-16" />
+              <div key={i} className="flex flex-col items-center gap-2 w-24">
+                <Skeleton className="h-24 w-24 rounded-full" />
+                <Skeleton className="h-4 w-20" />
               </div>
             ))}
           </div>
@@ -41,29 +35,32 @@ const AdStories = ({ stories, isLoading }: AdStoriesProps) => {
 
   return (
     <div className="w-full">
-      <h2 className="text-2xl font-bold mb-4">Destaques por Categoria</h2>
+      <h2 className="text-2xl font-bold mb-4">Categorias</h2> {/* Título alterado para 'Categorias' */}
       <ScrollArea className="w-full whitespace-nowrap">
         <div className="flex w-max space-x-4 pb-4">
-          {stories.map((story) => (
-            <Link
-              key={story.id}
-              to={`/anuncio/${story.id}`}
-              className="group flex flex-col items-center gap-2 w-20 text-center"
-            >
-              <div className="h-20 w-20 rounded-full p-1 bg-gradient-to-tr from-primary to-accent-gradient transition-transform duration-300 group-hover:scale-105">
-                <div className="h-full w-full bg-background rounded-full p-1">
-                  <img
-                    src={getOptimizedImageUrl(story.image_urls[0], { width: 150, height: 150, resize: 'cover' }) || '/placeholder.svg'}
-                    alt={story.title}
-                    className="h-full w-full rounded-full object-cover"
-                  />
+          {stories.map((story) => {
+            const optimizedImageUrl = story.image_urls?.[0] ? getOptimizedImageUrl(story.image_urls[0], { width: 200, height: 200, resize: 'cover' }, 'advertisements') : undefined;
+            return (
+              <Link
+                key={story.id}
+                to={`/anuncios/categoria/${story.category_slug}`}
+                className="group flex flex-col items-center gap-2 w-24 text-center"
+              >
+                <div className="h-24 w-24 rounded-full p-1 bg-gradient-to-tr from-primary to-accent-gradient transition-transform duration-300 group-hover:scale-105">
+                  <div className="h-full w-full bg-background rounded-full p-1">
+                    <img
+                      src={optimizedImageUrl || '/placeholder.svg'}
+                      alt={story.title}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  </div>
                 </div>
-              </div>
-              <p className="text-xs font-medium text-muted-foreground truncate w-full group-hover:text-primary transition-colors">
-                {story.category_name}
-              </p>
-            </Link>
-          ))}
+                <p className="text-xs font-medium text-muted-foreground truncate w-full group-hover:text-primary transition-colors">
+                  {story.category_name}
+                </p>
+              </Link>
+            );
+          })}
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>

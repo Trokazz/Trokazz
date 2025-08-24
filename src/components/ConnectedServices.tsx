@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Wrench } from "lucide-react";
+import { getOptimizedImageUrl } from "@/lib/utils"; // Import getOptimizedImageUrl
 
 interface ConnectedServicesProps {
   tags: string[] | null;
@@ -67,7 +68,7 @@ const ConnectedServices = ({ tags, categoryName }: ConnectedServicesProps) => {
           {services.map(profile => (
             <Link to={`/loja/${profile.username}`} key={profile.id} className="group text-center space-y-2">
               <Avatar className="h-20 w-20 mx-auto transition-transform group-hover:scale-105">
-                <AvatarImage src={profile.avatar_url || undefined} />
+                <AvatarImage src={getOptimizedImageUrl(profile.avatar_url, { width: 64, height: 64 }, 'avatars')} />
                 <AvatarFallback>{profile.full_name?.[0] || 'P'}</AvatarFallback>
               </Avatar>
               <p className="text-sm font-medium truncate group-hover:text-primary">{profile.full_name}</p>
