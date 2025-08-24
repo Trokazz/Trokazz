@@ -63,6 +63,12 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // New custom color for OLX-like buttons
+        'olx-orange': {
+          DEFAULT: 'hsl(var(--olx-orange))',
+          foreground: 'hsl(var(--olx-orange-foreground))',
+          darker: 'hsl(var(--olx-orange-darker))', // New darker shade for hover
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -104,5 +110,5 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],
+  plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography"), require("@tailwindcss/line-clamp")],
 } satisfies Config;
