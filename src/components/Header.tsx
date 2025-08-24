@@ -1,6 +1,6 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Search, MessagesSquare } from "lucide-react";
+import { Sparkles, Search, MessagesSquare, MapPin } from "lucide-react";
 import { useSession } from "@/contexts/SessionContext";
 import {
   DropdownMenu,
@@ -26,6 +26,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+interface HeaderProps {
+  showNearbyAds: boolean;
+  setShowNearbyAds: (show: boolean) => void;
+}
+
 const fetchHeaderProfile = async (userId: string | undefined) => {
   if (!userId) return null;
   const { data, error } = await supabase
@@ -37,9 +42,10 @@ const fetchHeaderProfile = async (userId: string | undefined) => {
   return data;
 };
 
-const Header = () => {
+const Header = ({ showNearbyAds, setShowNearbyAds }: HeaderProps) => { // Recebe props
   const { session, loading: sessionLoading } = useSession();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useIsMobile();
 
@@ -84,6 +90,26 @@ const Header = () => {
 
   const optimizedAvatarUrl = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, { width: 80, height: 80 }, 'avatars') : undefined;
 
+  const pathsToHideMobileSearchBar = [
+    '/inbox',
+    '/chat',
+    '/perfil',
+    '/novo-anuncio',
+    '/procurar/novo',
+    '/servicos/novo',
+    '/auth',
+    '/forgot-password',
+    '/contato',
+    '/faq',
+    '/about-us',
+    '/terms-of-service',
+    '/privacy-policy',
+  ];
+
+  const shouldHideMobileSearchBar = pathsToHideMobileSearchBar.some(pathPrefix => 
+    location.pathname.startsWith(pathPrefix)
+  );
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
@@ -96,7 +122,6 @@ const Header = () => {
           </Link>
         </div>
 
-        {/* Search bar always visible, but takes full width on mobile */}
         <div className="flex-1 w-full max-w-xl md:flex hidden">
           <form onSubmit={handleSearch} className="w-full relative">
             <Input
@@ -111,7 +136,23 @@ const Header = () => {
         </div>
 
         <div className="flex items-center space-x-1">
-          {/* O ícone do Mural de Procurados (Rss) foi removido daqui */}
+          {/* Botão de localização */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setShowNearbyAds(!showNearbyAds)}
+                className={showNearbyAds ? "text-primary" : "text-muted-foreground"}
+              >
+                <MapPin className="h-5 w-5" />
+                <span className="sr-only">Anúncios Próximos</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{showNearbyAds ? "Ocultar Anúncios Próximos" : "Mostrar Anúncios Próximos"}</p>
+            </TooltipContent>
+          </Tooltip>
 
           <div className="hidden md:flex items-center space-x-1">
             {session && (
@@ -136,7 +177,6 @@ const Header = () => {
           {isLoading ? (
             <Skeleton className="h-10 w-10 rounded-full" />
           ) : session ? (
-            // Condicionalmente renderiza o DropdownMenu do perfil apenas se não for mobile
             !isMobile && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -173,19 +213,21 @@ const Header = () => {
           </Button>
         </div>
       </div>
-      {/* Mobile-only search bar */}
-      <div className="md:hidden px-4 pb-2">
-        <form onSubmit={handleSearch} className="w-full relative">
-          <Input
-            type="search"
-            placeholder="Pesquise qualquer item..."
-            className="w-full pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-        </form>
-      </div>
+      {/* Mobile-only search bar - Condicionalmente renderizado */}
+      {isMobile && !shouldHideMobileSearchBar && (
+        <div className="md:hidden px-4 pb-2">
+          <form onSubmit={handleSearch} className="w-full relative">
+            <Input
+              type="search"
+              placeholder="Pesquise qualquer item..."
+              className="w-full pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          </form>
+        </div>
+      )}
     </header>
   );
 };

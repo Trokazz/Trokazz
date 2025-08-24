@@ -6,6 +6,7 @@ import { showError } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client'; // Import supabase for public URLs
+import { getOptimizedImageUrl } from '@/lib/utils'; // Explicitly import getOptimizedImageUrl
 
 interface ImageItem {
   id: string; // Unique ID for React key and D&D
@@ -23,21 +24,26 @@ interface MultiImageUploaderProps {
 const MultiImageUploader = ({ onChange, maxFiles = 5, initialImageUrls = [] }: MultiImageUploaderProps) => {
   const [items, setItems] = useState<ImageItem[]>([]);
   const isMobile = useIsMobile();
+  const isInitialRender = useRef(true); // Flag para controlar a renderização inicial
 
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
-  // Initialize items from initialImageUrls
+  // Efeito para inicializar items de initialImageUrls apenas na primeira renderização
   useEffect(() => {
-    const initialItems: ImageItem[] = initialImageUrls.map(url => ({
-      id: url, // Use URL as ID for existing images
-      type: 'url',
-      value: url,
-      preview: supabase.storage.from("advertisements").getPublicUrl(url).data.publicUrl, // Get public URL for preview
-    }));
-    console.log("MultiImageUploader: Initializing items from initialImageUrls:", initialItems);
-    setItems(initialItems);
-  }, [initialImageUrls]);
+    if (isInitialRender.current && initialImageUrls.length > 0) {
+      const initialItems: ImageItem[] = initialImageUrls.map(url => ({
+        id: url,
+        type: 'url',
+        value: url,
+        preview: getOptimizedImageUrl(url, { width: 400, height: 400 }, 'advertisements') || '/placeholder.svg',
+      }));
+      console.log("MultiImageUploader: Initializing items from initialImageUrls (first render):", initialItems);
+      setItems(initialItems);
+      onChange(initialItems.map(item => item.value)); // Informa o pai sobre os itens iniciais
+    }
+    isInitialRender.current = false; // Marca como não sendo a renderização inicial após a primeira execução do efeito
+  }, [initialImageUrls, onChange]); // Dependências para quando initialImageUrls pode realmente mudar (ex: em EditAd)
 
   const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     console.log("MultiImageUploader: onDrop called. Accepted files:", acceptedFiles);
@@ -48,17 +54,21 @@ const MultiImageUploader = ({ onChange, maxFiles = 5, initialImageUrls = [] }: M
       return;
     }
 
-    const newFileItems: ImageItem[] = acceptedFiles.map(file => ({
-      id: `${file.name}-${Date.now()}-${Math.random()}`, // Unique ID for new files
-      type: 'file',
-      value: file,
-      preview: URL.createObjectURL(file),
-    }));
+    const newFileItems: ImageItem[] = acceptedFiles.map(file => {
+      const objectUrl = URL.createObjectURL(file);
+      console.log(`MultiImageUploader: New file accepted: ${file.name}, Object URL: ${objectUrl}`);
+      return {
+        id: `${file.name}-${Date.now()}-${Math.random()}`, // Unique ID for new files
+        type: 'file',
+        value: file,
+        preview: objectUrl,
+      };
+    });
 
     const updatedItems = [...items, ...newFileItems];
     console.log("MultiImageUploader: Updated items after drop:", updatedItems);
     setItems(updatedItems);
-    onChange(updatedItems.map(item => item.value)); // Pass back File objects and paths
+    onChange(updatedItems.map(item => item.value)); // Passa de volta objetos File e caminhos
 
     if (fileRejections.length > 0) {
       fileRejections.forEach(rejection => {
@@ -85,7 +95,7 @@ const MultiImageUploader = ({ onChange, maxFiles = 5, initialImageUrls = [] }: M
     const removedItem = items.find(item => item.id === idToRemove);
 
     if (removedItem && removedItem.type === 'file') {
-      URL.revokeObjectURL(removedItem.preview); // Clean up object URL for new files
+      URL.revokeObjectURL(removedItem.preview); // Limpa a URL do objeto para novos arquivos
     }
     
     console.log("MultiImageUploader: Updated items after remove:", updatedItems);
@@ -131,7 +141,7 @@ const MultiImageUploader = ({ onChange, maxFiles = 5, initialImageUrls = [] }: M
     e.dataTransfer.dropEffect = "move";
   };
 
-  // Cleanup object URLs when component unmounts or items change
+  // Limpa as URLs de objeto quando o componente é desmontado ou os itens mudam
   useEffect(() => {
     return () => {
       items.forEach(item => {
@@ -182,7 +192,7 @@ const MultiImageUploader = ({ onChange, maxFiles = 5, initialImageUrls = [] }: M
               onDragOver={handleDragOver}
               onDrop={handleDrop}
             >
-              <img src={item.preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" loading="lazy" />
+              <img src={item.preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
               <Button
                 variant="destructive"
                 size="icon"

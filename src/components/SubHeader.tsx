@@ -6,6 +6,7 @@ import * as Icons from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getOptimizedImageUrl } from "@/lib/utils"; // Importar getOptimizedImageUrl
+import { useIsMobile } from "@/hooks/use-mobile"; // Importar useIsMobile
 
 // Atualizado: Adicionado image_url à Category
 type Category = { slug: string; name: string; icon: string; parent_slug: string | null; image_url: string | null };
@@ -54,9 +55,14 @@ const SubHeader = () => {
   });
 
   const topLevelCategories = categories?.filter(cat => !cat.parent_slug) || [];
+  const isMobile = useIsMobile(); // Usar o hook para detectar mobile
+
+  if (isMobile) {
+    return null; // Não renderiza o SubHeader em mobile
+  }
 
   return (
-    <div className="bg-background border-b hidden md:block">
+    <div className="bg-background border-b hidden md:block"> {/* Garante que só aparece em desktop */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <ScrollArea className="w-full whitespace-nowrap">
           <div className="flex w-max space-x-6 py-4">
@@ -66,6 +72,22 @@ const SubHeader = () => {
                 <Skeleton className="h-4 w-20" />
               </div>
             ))}
+            {/* Ícone "O que você procura" */}
+            <Link
+              to="/procurados"
+              className="group flex flex-col items-center justify-start gap-2 text-center w-24"
+            >
+              <div className={cn(
+                "flex items-center justify-center h-16 w-16 rounded-full transition-all duration-300 ease-in-out group-hover:shadow-md group-hover:scale-105 overflow-hidden",
+                categoryStyles.default.bg,
+                categoryStyles.default.hoverBg
+              )}>
+                <Icons.Compass className={cn("h-8 w-8 flex-shrink-0", categoryStyles.default.text)} />
+              </div>
+              <span className="text-xs font-medium text-muted-foreground group-hover:text-primary transition-colors duration-300 whitespace-normal leading-tight line-clamp-2 overflow-hidden text-ellipsis">
+                O que você procura?
+              </span>
+            </Link>
             {topLevelCategories?.map((cat: Category) => { // Renderiza apenas categorias principais
               const Icon = categoryIconMap[cat.slug] || (Icons as any)[cat.icon] || Icons.HelpCircle;
               const styles = categoryStyles[cat.slug] || categoryStyles.default;

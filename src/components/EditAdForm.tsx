@@ -20,7 +20,7 @@ import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X, Loader2 } from "lucide-react"; // Importar Loader2
+import { X, Loader2, ArrowLeft } from "lucide-react"; // Importar Loader2 e ArrowLeft
 import { getRelativePathFromUrlOrPath } from "@/lib/utils"; // Importar a nova função
 import MultiImageUploader from "./MultiImageUploader"; // Importar MultiImageUploader
 
@@ -181,11 +181,16 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
 
   return (
     <Card className="max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Editar Anúncio</CardTitle>
-        <CardDescription>
-          Faça as alterações necessárias no anúncio.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate(userType === 'admin' ? '/admin/ads' : '/perfil')}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <CardTitle>Editar Anúncio</CardTitle>
+          <CardDescription>
+            Faça as alterações necessárias no anúncio.
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -252,9 +257,6 @@ const EditAdForm = ({ adId, userType }: EditAdFormProps) => {
                 ) : (
                   "Salvar Alterações"
                 )}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => navigate(userType === 'admin' ? '/admin/ads' : '/perfil')}>
-                Cancelar
               </Button>
             </div>
           </form>

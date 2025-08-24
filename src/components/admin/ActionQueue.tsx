@@ -174,6 +174,7 @@ const ActionQueue = () => {
     const toastId = showLoading("Processando solicitação...");
     try {
       const { error: requestError } = await supabase.from("verification_requests").update({ status, rejection_reason: reason, reviewed_at: new Date().toISOString(), reviewed_by: adminUser?.id }).eq("id", requestId);
+      console.log("ActionQueue: Result of verification_requests update:", { requestError }); // Log do erro
       if (requestError) {
         console.error("ActionQueue: Error updating verification request status:", requestError);
         throw requestError;

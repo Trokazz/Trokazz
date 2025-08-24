@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react"; // Adicionado useState
 import Header from "./Header";
 import SubHeader from "./SubHeader";
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
@@ -9,7 +9,7 @@ import MaintenancePage from "@/pages/Maintenance";
 import { Skeleton } from "./ui/skeleton";
 import MobileBottomNav from "./MobileBottomNav";
 import PageSkeleton from "./PageSkeleton";
-import PWAInstallPrompt from "./PWAInstallPrompt"; // Importando o novo componente
+import PWAInstallPrompt from "./PWAInstallPrompt";
 
 const fetchSiteSettings = async () => {
   const { data, error } = await supabase.from("site_settings").select("key, value");
@@ -35,6 +35,7 @@ const Root = () => {
   const { user, session, loading: sessionLoading } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
+  const [showNearbyAds, setShowNearbyAds] = useState(false); // Estado movido para Root
 
   const { data: settings, isLoading: isLoadingSettings } = useQuery({
     queryKey: ["siteSettings"],
@@ -67,11 +68,11 @@ const Root = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header />
+      <Header showNearbyAds={showNearbyAds} setShowNearbyAds={setShowNearbyAds} /> {/* Passado como prop */}
       <SubHeader />
       <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8">
         <Suspense fallback={<PageSkeleton />}>
-          <Outlet />
+          <Outlet context={{ showNearbyAds }} /> {/* Passado via context para Outlet */}
         </Suspense>
       </main>
       <footer className="bg-card border-t py-6 hidden md:block">
@@ -85,7 +86,7 @@ const Root = () => {
         </div>
       </footer>
       <MobileBottomNav />
-      <PWAInstallPrompt /> {/* Adicionando o componente aqui */}
+      <PWAInstallPrompt />
     </div>
   );
 };
