@@ -15,6 +15,7 @@
 
     --primary: 240 82% 60%;
     --primary-foreground: 0 0% 100%;
+    --primary-darker: 240 82% 50%; /* Nova variável para o hover do botão */
 
     --secondary: 215 28% 96%;
     --secondary-foreground: 224 71% 4%;
@@ -50,6 +51,10 @@
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --olx-orange: 25 100% 50%; /* HSL for #FF8C00 */
+    --olx-orange-foreground: 0 0% 100%; /* HSL for #FFFFFF */
+    --olx-orange-darker: 25 100% 45%; /* A slightly darker shade for hover */
   }
 
   .dark {
@@ -64,6 +69,7 @@
 
     --primary: 240 82% 60%;
     --primary-foreground: 0 0% 100%;
+    --primary-darker: 240 82% 50%; /* Nova variável para o hover do botão */
 
     --secondary: 215 28% 17%;
     --secondary-foreground: 0 0% 100%;
@@ -90,6 +96,10 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --olx-orange: 25 100% 50%; /* HSL for #FF8C00 */
+    --olx-orange-foreground: 0 0% 100%; /* HSL for #FFFFFF */
+    --olx-orange-darker: 25 100% 45%; /* A slightly darker shade for hover */
   }
 }
 
@@ -101,4 +111,27 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* New styles for drag and drop */
+.dragging {
+  opacity: 0.5;
+  border: 2px dashed hsl(var(--primary));
+}
+
+/* Custom styles for Supabase Auth UI buttons to prevent disappearance on hover */
+.supabase-auth-container button[type="submit"] {
+  /* Ensure button is always visible and not transformed away */
+  opacity: 1 !important;
+  transform: none !important;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out !important;
+  background-color: hsl(var(--olx-orange)) !important; /* Ensure default background is applied */
+  color: hsl(var(--olx-orange-foreground)) !important; /* Ensure default text color is applied */
+}
+
+.supabase-auth-container button[type="submit"]:hover {
+  background-color: hsl(var(--olx-orange-darker)) !important;
+  color: hsl(var(--olx-orange-foreground)) !important;
+  opacity: 1 !important;
+  transform: none !important;
 }
