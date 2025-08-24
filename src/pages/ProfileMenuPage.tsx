@@ -12,7 +12,8 @@ import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
 import { Profile as ProfileType, UserLevelDetails } from "@/types/database";
 import * as Icons from "lucide-react";
 import usePageMetadata from "@/hooks/usePageMetadata";
-import { Star, BadgeCheck, Pencil, Award, History, MessageSquareText, Heart, LifeBuoy, Info, FileText, Gem, ChartBar, ShieldCheck } from "lucide-react";
+import { Star, BadgeCheck, Pencil, Award, History, MessageSquareText, Heart, LifeBuoy, Info, FileText, Gem, ChartBar, ShieldCheck, LogOut } from "lucide-react"; // Importado LogOut
+import { useNavigate } from "react-router-dom"; // Importado useNavigate
 
 const fetchProfileData = async (userId: string): Promise<ProfileType> => {
   const { data, error } = await supabase
@@ -61,6 +62,7 @@ const fetchProfileData = async (userId: string): Promise<ProfileType> => {
 
 const ProfileMenuPage = () => {
   const { session } = useSession();
+  const navigate = useNavigate(); // Inicializa useNavigate
   const { data: profile, isLoading: isLoadingProfile } = useQuery<ProfileType>({
     queryKey: ["profileMenuPageData", session?.user?.id],
     queryFn: () => fetchProfileData(session!.user!.id),
@@ -74,6 +76,11 @@ const ProfileMenuPage = () => {
     ogImage: profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }, 'avatars') : `${window.location.origin}/logo.png`,
     ogUrl: window.location.href,
   });
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/");
+  };
 
   const profileMenuItems = [
     { to: "/perfil/editar", label: "Editar Perfil", icon: Pencil },
@@ -98,7 +105,7 @@ const ProfileMenuPage = () => {
   if (isLoadingProfile) {
     return (
       <div className="space-y-8">
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full mb-8" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.from({ length: 10 }).map((_, i) => (
             <Skeleton key={i} className="h-16 w-full" />
@@ -180,6 +187,14 @@ const ProfileMenuPage = () => {
             </Link>
           </Button>
         ))}
+        {/* Botão de Sair adicionado aqui */}
+        <Button onClick={handleLogout} variant="destructive" className="h-auto py-4 px-6 flex justify-between items-center text-left">
+          <div className="flex items-center gap-4">
+            <LogOut className="h-6 w-6" />
+            <span className="text-lg font-medium">Sair</span>
+          </div>
+          <Icons.ChevronRight className="h-5 w-5" />
+        </Button>
       </div>
     </div>
   );

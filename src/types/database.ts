@@ -26,6 +26,7 @@ export type Advertisement = Database['public']['Tables']['advertisements']['Row'
     user_level: string | null;
     userLevelDetails: UserLevelDetails | null;
   };
+  distance_km?: number; // Added for nearby ads
 };
 
 export type ReputationBadgeType = Database['public']['Tables']['badges']['Row'];
@@ -80,7 +81,7 @@ export type ProfilePageData = {
   })[];
 };
 
-// Novos tipos para a página inicial
+-- Novos tipos para a página inicial
 export type Banner = Database['public']['Tables']['banners']['Row'];
 
 export type AdStory = Pick<Database['public']['Tables']['advertisements']['Row'], 'id' | 'title' | 'image_urls'> & {
@@ -90,8 +91,19 @@ export type AdStory = Pick<Database['public']['Tables']['advertisements']['Row']
 
 export type Activity = Database['public']['Tables']['activity_feed']['Row'];
 
-// Atualizado: Adicionado image_url à Category
-export type Category = Database['public']['Tables']['categories']['Row'] & { image_url: string | null; };
+-- Atualizado: Adicionado image_url à Category e tipagem mais específica para custom_fields
+export type Category = Database['public']['Tables']['categories']['Row'] & { 
+  image_url: string | null; 
+  custom_fields: {
+    hasPriceFilter?: boolean;
+    fields?: Array<{
+      name: string;
+      label: string;
+      type: string;
+      options?: string[];
+    }>;
+  } | null;
+};
 
 export type HomePageData = {
   banners: Banner[];

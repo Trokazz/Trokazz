@@ -1,399 +1,446 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import { useNavigate, Link, Navigate, useSearchParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supabase } from "@/integrations/supabase/client";
+import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
+import { Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { supabase } from "@/integrations/supabase/client";
-import { useSession } from "@/contexts/SessionContext";
-import { useTheme } from "@/components/ThemeProvider";
-import usePageMetadata from "@/hooks/usePageMetadata";
-import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import InputMask from 'react-input-mask'; // Importar InputMask
+import axios from 'axios'; // Importar axios
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from "lucide-react";
-
-// --- Schemas e Componentes Auxiliares (do Signup.tsx) ---
-const signupSchema = z.object({
-  account_type: z.enum(["fisica", "juridica"], {
-    required_error: "Selecione o tipo de conta.",
-  }),
-  document_number: z.string().min(11, "CPF/CNPJ inválido.").max(18, "CPF/CNPJ inválido."),
-  full_name: z.string().min(3, "O nome completo deve ter pelo menos 3 caracteres."),
-  username: z.string()
-    .min(3, "O nome de usuário deve ter de 3 a 20 caracteres.")
-    .max(20, "O nome de usuário deve ter de 3 a 20 caracteres.")
-    .regex(/^[a-z0-9_]+$/, "Use apenas letras minúsculas, números e o caractere '_'.")
-    .optional()
-    .or(z.literal('')),
-  date_of_birth: z.string().refine((val) => /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
-    message: "Use o formato DD/MM/AAAA.",
-  }),
-  phone: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  email: z.string().email("Por favor, insira um e-mail válido."),
-  password: z.string().min(8, "A senha deve ter no mínimo 8 caracteres.")
-    .refine((val) => /[A-Z]/.test(val), { message: "A senha deve conter pelo menos uma letra maiúscula." })
-    .refine((val) => /[a-z]/.test(val), { message: "A senha deve conter pelo menos uma letra minúscula." })
-    .refine((val) => /\d/.test(val), { message: "A senha deve conter pelo menos um número." })
-    .refine((val) => /[@$!%*?&]/.test(val), { message: "A senha deve conter pelo menos um caractere especial (@$!%*?&)." }),
+const loginSchema = z.object({
+  email: z.string().email("Por favor, insira um email válido."),
+  password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
 });
 
-const PasswordRequirement = ({ isValid, text }: { isValid: boolean; text: string }) => (
-  <div className={`flex items-center text-sm ${isValid ? 'text-green-600' : 'text-muted-foreground'}`}>
-    {isValid ? <CheckCircle className="h-4 w-4 mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
-    {text}
-  </div>
-);
-// --- Fim dos Schemas e Componentes Auxiliares ---
+const signupSchema = z.object({
+  email: z.string().email("Por favor, insira um email válido."),
+  password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+  full_name: z.string().min(2, "O nome completo é obrigatório."),
+  username: z.string().min(3, "O nome de usuário deve ter pelo menos 3 caracteres.").optional().or(z.literal('')),
+  account_type: z.enum(["individual", "business"], { required_error: "Por favor, selecione um tipo de conta." }),
+  document_number: z.string().min(1, "O CPF/CNPJ é obrigatório.").refine((val) => {
+    // Basic validation, more robust validation would be needed for real CPF/CNPJ
+    const cleaned = val.replace(/\D/g, '');
+    return cleaned.length >= 11 && cleaned.length <= 14; // CPF (11) or CNPJ (14)
+  }, "CPF/CNPJ inválido."),
+  date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de nascimento inválida.").nonempty("A data de nascimento é obrigatória."),
+  phone: z.string().min(10, "O telefone é obrigatório.").refine((val) => {
+    const cleaned = val.replace(/\D/g, '');
+    return cleaned.length >= 10 && cleaned.length <= 11; // 10 or 11 digits for phone
+  }, "Telefone inválido."),
+  cep: z.string().regex(/^\d{5}-\d{3}$/, "CEP inválido.").nonempty("O CEP é obrigatório."),
+  address: z.string().min(5, "O endereço é obrigatório."),
+  address_number: z.string().min(1, "O número é obrigatório."),
+  address_complement: z.string().optional().or(z.literal('')),
+  neighborhood: z.string().min(2, "O bairro é obrigatório."),
+  city: z.string().min(2, "A cidade é obrigatória."),
+  state: z.string().length(2, "O estado é obrigatório e deve ter 2 letras."),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
+type SignupFormData = z.infer<typeof signupSchema>;
 
 const AuthTabs = () => {
-  const { session } = useSession();
+  const [activeTab, setActiveTab] = useState("login");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'login');
-  const [isSocialLoading, setIsSocialLoading] = useState(false);
 
-  // --- Lógica do Signup.tsx ---
-  const [isSubmittingSignup, setIsSubmittingSignup] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  const signupForm = useForm<z.infer<typeof signupSchema>>({
-    resolver: zodResolver(signupSchema),
-    mode: "onTouched",
+  const loginForm = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: "",
-      phone: "",
-      address: "",
-    }
+      email: "",
+      password: "",
+    },
   });
 
-  const password = signupForm.watch("password") || "";
-  const accountType = signupForm.watch("account_type");
+  const signupForm = useForm<SignupFormData>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      full_name: "",
+      username: "",
+      account_type: "individual",
+      document_number: "",
+      date_of_birth: "",
+      phone: "",
+      cep: "",
+      address: "",
+      address_number: "",
+      address_complement: "",
+      neighborhood: "",
+      city: "",
+      state: "",
+    },
+  });
 
-  const passwordRequirements = {
-    length: password.length >= 8,
-    uppercase: /[A-Z]/.test(password),
-    lowercase: /[a-z]/.test(password),
-    number: /\d/.test(password),
-    special: /[@$!%*?&]/.test(password),
+  const handleLogin = async (values: LoginFormData) => {
+    setIsLoading(true);
+    const toastId = showLoading("Entrando...");
+    const { error } = await supabase.auth.signInWithPassword({
+      email: values.email,
+      password: values.password,
+    });
+    dismissToast(toastId);
+    if (error) {
+      showError(error.message);
+    } else {
+      showSuccess("Login realizado com sucesso!");
+      navigate("/");
+    }
+    setIsLoading(false);
   };
 
-  async function onSignupSubmit(values: z.infer<typeof signupSchema>) {
-    setIsSubmittingSignup(true);
+  const handleSignUp = async (values: SignupFormData) => {
+    setIsLoading(true);
     const toastId = showLoading("Criando sua conta...");
 
-    try {
-      const finalUsername = values.username || values.full_name
-        .toLowerCase()
-        .replace(/\s+/g, '_')
-        .replace(/[^a-z0-9_]/g, '')
-        .substring(0, 15) + `_${Math.random().toString(36).substring(2, 6)}`;
+    const { email, password, ...metaData } = values;
 
-      const { data, error } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          data: {
-            full_name: values.full_name,
-            username: finalUsername,
-            account_type: values.account_type,
-            document_number: values.document_number.replace(/\D/g, ''),
-            date_of_birth: values.date_of_birth.split('/').reverse().join('-'),
-            phone: values.phone || null,
-            address: values.address || null,
-          }
-        }
-      });
+    // Combine address fields into a single address string for the profile table
+    const fullAddress = `${values.address}, ${values.address_number}${values.address_complement ? ` - ${values.address_complement}` : ''}, ${values.neighborhood}, ${values.city} - ${values.state}, ${values.cep}`;
 
-      if (error) throw error;
-      if (!data.user) throw new Error("Não foi possível criar o usuário.");
-
-      try {
-        await supabase.functions.invoke('send-welcome-email');
-        console.log('Welcome email function invoked successfully.');
-      } catch (emailError) {
-        console.error('Failed to send welcome email:', emailError);
-      }
-
-      dismissToast(toastId);
-      showSuccess("Conta criada! Por favor, verifique seu e-mail para confirmar.");
-      navigate("/auth?tab=login"); // Redireciona para a aba de login após o cadastro
-    } catch (error) {
-      dismissToast(toastId);
-      console.error("Detailed signup error:", error);
-      showError(error);
-    } finally {
-      setIsSubmittingSignup(false);
-    }
-  }
-  // --- Fim da Lógica do Signup.tsx ---
-
-  usePageMetadata({
-    title: "Acessar ou Criar Conta - Trokazz",
-    description: "Faça login ou crie sua conta gratuita no Trokazz para comprar, vender e trocar produtos e serviços em Dourados e região.",
-    keywords: "login, cadastro, entrar, criar conta, signup, trokazz, classificados, dourados",
-    ogUrl: window.location.href,
-  });
-
-  // Redireciona se já estiver logado
-  if (session) {
-    return <Navigate to="/" />;
-  }
-
-  // Atualiza a aba ativa na URL
-  useEffect(() => {
-    const currentTab = searchParams.get('tab');
-    if (currentTab && currentTab !== activeTab) {
-      setActiveTab(currentTab);
-    }
-  }, [searchParams, activeTab]);
-
-  // Lógica de autenticação do Supabase (do Login.tsx)
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) { // Se houver uma sessão, navega para a página inicial
-        navigate("/");
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
-
-  const handleSocialLogin = async (provider: 'google') => {
-    setIsSocialLoading(true);
-    const toastId = showLoading(`Entrando com ${provider === 'google' ? 'Google' : 'Facebook'}...`);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: window.location.origin,
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          ...metaData,
+          address: fullAddress, // Store the combined address
         },
-      });
-      if (error) throw error;
-      dismissToast(toastId);
-    } catch (error) {
-      dismissToast(toastId);
-      showError(error instanceof Error ? error.message : "Erro ao fazer login com o provedor social.");
-    } finally {
-      setIsSocialLoading(false);
+      },
+    });
+    dismissToast(toastId);
+    if (error) {
+      showError(error.message);
+    } else {
+      showSuccess("Conta criada com sucesso! Verifique seu e-mail para confirmar.");
+      setActiveTab("login"); // Redireciona para a aba de login após o cadastro
     }
+    setIsLoading(false);
   };
 
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    setSearchParams({ tab: value }, { replace: true });
-  };
+  const accountType = signupForm.watch("account_type");
+  const cepValue = signupForm.watch("cep");
+
+  useEffect(() => {
+    const fetchAddress = async () => {
+      const cleanedCep = cepValue.replace(/\D/g, '');
+      if (cleanedCep.length === 8) {
+        try {
+          const response = await axios.get(`https://viacep.com.br/ws/${cleanedCep}/json/`);
+          const data = response.data;
+          if (!data.erro) {
+            signupForm.setValue("address", data.logradouro || "");
+            signupForm.setValue("neighborhood", data.bairro || "");
+            signupForm.setValue("city", data.localidade || "");
+            signupForm.setValue("state", data.uf || "");
+            showSuccess("Endereço preenchido automaticamente!");
+          } else {
+            showError("CEP não encontrado.");
+            signupForm.setValue("address", "");
+            signupForm.setValue("neighborhood", "");
+            signupForm.setValue("city", "");
+            signupForm.setValue("state", "");
+          }
+        } catch (error) {
+          console.error("Erro ao buscar CEP:", error);
+          showError("Erro ao buscar CEP. Tente novamente.");
+        }
+      }
+    };
+
+    fetchAddress();
+  }, [cepValue, signupForm]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background p-4">
-      <div className="w-full max-w-md mx-auto bg-card p-8 rounded-lg shadow-md">
-        <div className="text-center mb-8">
-          <img src="/logo.png" alt="Trokazz Logo" className="h-12 w-auto mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-foreground">
-            {activeTab === 'login' ? 'Acesse a sua conta' : 'Crie a sua conta. É grátis!'}
-          </h2>
-        </div>
-
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Entrar</TabsTrigger>
-            <TabsTrigger value="signup">Cadastrar</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="login" className="mt-6">
-            {/* Social Login Section */}
-            <div className="flex justify-center gap-4 mb-6">
-              <Button 
-                variant="outline" 
-                size="icon" 
-                className="h-16 w-16 rounded-full border-2 border-gray-300 hover:border-primary"
-                onClick={() => handleSocialLogin('google')}
-                disabled={isSocialLoading}
-              >
-                {isSocialLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : <img src="/google-icon.svg" alt="Google" className="h-8 w-8" />}
-              </Button>
-            </div>
-            
-            {/* "Ou" separator */}
-            <div className="relative flex justify-center text-xs uppercase mb-6">
-              <span className="bg-background px-2 text-muted-foreground z-10">ou</span>
-              <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
-            </div>
-
-            <div className="supabase-auth-container"> {/* Wrapper div added here */}
-              <Auth
-                supabaseClient={supabase}
-                providers={[]}
-                appearance={{
-                  theme: ThemeSupa,
-                  variables: {
-                    default: {
-                      colors: {
-                        brand: 'hsl(var(--olx-orange))',
-                        brandAccent: 'hsl(var(--olx-orange-foreground))',
-                        inputBackground: 'hsl(var(--input))',
-                        inputBorder: 'hsl(var(--border))',
-                        inputPlaceholder: 'hsl(var(--muted-foreground))',
-                        inputText: 'hsl(var(--foreground))',
-                        messageText: 'hsl(var(--destructive-foreground))',
-                        messageBackground: 'hsl(var(--destructive))',
-                        defaultButtonBackground: 'hsl(var(--olx-orange))',
-                        defaultButtonBorder: 'hsl(var(--olx-orange))',
-                        defaultButtonText: 'hsl(var(--olx-orange-foreground))',
-                        // Removed unsupported properties
-                        // anchorTextColor: 'hsl(var(--primary))',
-                        // anchorTextHoverColor: 'hsl(var(--primary-foreground))',
-                      },
-                    },
-                  },
-                }}
-                theme={theme === 'dark' ? 'dark' : 'light'}
-                showLinks={false}
-                redirectTo={window.location.origin}
-              />
-            </div>
-            <div className="text-center mt-6 text-sm text-muted-foreground">
-              <Link to="/forgot-password" className="text-primary hover:underline">
-                Esqueceu sua senha?
-              </Link>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="signup" className="mt-6">
-            <p className="text-center text-muted-foreground mb-6">
-              Nos informe alguns dados para que possamos melhorar a sua experiência na Trokazz.
-            </p>
-
-            <Form {...signupForm}>
-              <form onSubmit={signupForm.handleSubmit(onSignupSubmit)} className="space-y-4">
-                <FormField control={signupForm.control} name="account_type" render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>Escolha o tipo da sua conta</FormLabel>
-                    <FormControl>
-                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex space-x-4">
-                        <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="fisica" /></FormControl><FormLabel className="font-normal">Pessoa Física</FormLabel></FormItem>
-                        <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="juridica" /></FormControl><FormLabel className="font-normal">Pessoa Jurídica</FormLabel></FormItem>
-                      </RadioGroup>
-                    </FormControl><FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={signupForm.control} name="document_number" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{accountType === 'juridica' ? 'CNPJ' : 'CPF'}</FormLabel>
-                    <FormControl><Input placeholder={accountType === 'juridica' ? '00.000.000/0000-00' : '000.000.000-00'} {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField control={signupForm.control} name="full_name" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome completo</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={signupForm.control} name="username" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Como você quer ser chamado(a)?</FormLabel>
-                      <FormControl><Input placeholder="Exemplo: João S." {...field} /></FormControl>
-                      <FormDescription>Aparecerá em seu perfil, anúncios e chats.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-
-                <FormField control={signupForm.control} name="date_of_birth" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Data de nascimento</FormLabel>
-                    <FormControl><Input placeholder="dd/mm/aaaa" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-
-                <FormField control={signupForm.control} name="phone" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Telefone (WhatsApp)</FormLabel>
-                    <FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-
-                <FormField control={signupForm.control} name="address" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Endereço</FormLabel>
-                    <FormControl><Input placeholder="Rua, Número, Bairro, Cidade" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField control={signupForm.control} name="email" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>E-mail</FormLabel>
-                      <FormControl><Input placeholder="seu@email.com" {...field} /></FormControl>
-                      <FormDescription>Enviaremos um e-mail de confirmação.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={signupForm.control} name="password" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Senha</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} />
-                          <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setShowPassword(!showPassword)}>
-                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </Button>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Para sua segurança, crie uma senha com no mínimo:</p>
-                  <PasswordRequirement isValid={passwordRequirements.length} text="8 ou mais caracteres" />
-                  <PasswordRequirement isValid={passwordRequirements.uppercase} text="Uma letra maiúscula" />
-                  <PasswordRequirement isValid={passwordRequirements.lowercase} text="Uma letra minúscula" />
-                  <PasswordRequirement isValid={passwordRequirements.number} text="Um número" />
-                  <PasswordRequirement isValid={passwordRequirements.special} text="Um caracter especial (exemplo: @$!%*?&)" />
-                </div>
-                <Button type="submit" className="w-full bg-olx-orange text-olx-orange-foreground hover:bg-olx-orange-darker" disabled={isSubmittingSignup}>
-                  {isSubmittingSignup ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cadastrando...
-                    </>
-                  ) : (
-                    "Cadastre-se"
-                  )}
-                </Button>
-              </form>
-            </Form>
-          </TabsContent>
-        </Tabs>
-
-        <div className="text-center mt-6 text-sm text-muted-foreground">
-          <Link to="/contato" className="text-primary hover:underline">
-            Preciso de ajuda?
-          </Link>
-        </div>
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Ao continuar, você concorda com nossos{" "}
-          <Link to="/termos-de-servico" target="_blank" className="underline hover:text-primary">Termos de Serviço</Link> e{" "}
-          <Link to="/politica-de-privacidade" target="_blank" className="underline hover:text-primary">Política de Privacidade</Link>.
-        </p>
-      </div>
+    <div className="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold text-foreground">
+              {activeTab === 'login' ? 'Acesse a sua conta' : 'Crie a sua conta. É grátis!'}
+            </h2>
+          </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="login">Entrar</TabsTrigger>
+              <TabsTrigger value="signup">Cadastrar</TabsTrigger>
+            </TabsList>
+            <TabsContent value="login">
+              <CardTitle>Entrar</CardTitle>
+              <CardDescription>
+                Acesse sua conta para continuar.
+              </CardDescription>
+              <CardContent className="space-y-4 pt-4">
+                <Form {...loginForm}>
+                  <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
+                    <FormField
+                      control={loginForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={loginForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Senha</FormLabel>
+                          <FormControl><Input type="password" placeholder="••••••••" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Entrar"}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </TabsContent>
+            <TabsContent value="signup">
+              <CardTitle>Cadastrar</CardTitle>
+              <CardDescription>
+                Crie sua conta em segundos.
+              </CardDescription>
+              <CardContent className="space-y-4 pt-4">
+                <Form {...signupForm}>
+                  <form onSubmit={signupForm.handleSubmit(handleSignUp)} className="space-y-4">
+                    <FormField
+                      control={signupForm.control}
+                      name="full_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome Completo</FormLabel>
+                          <FormControl><Input placeholder="Seu Nome Completo" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="username"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome de Usuário (Opcional)</FormLabel>
+                          <FormControl><Input placeholder="seu_usuario" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Senha</FormLabel>
+                          <FormControl><Input type="password" placeholder="••••••••" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="account_type"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tipo de Conta</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o tipo de conta" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="individual">Individual</SelectItem>
+                              <SelectItem value="business">Empresarial</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="document_number"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{accountType === 'business' ? 'CNPJ' : 'CPF'}</FormLabel>
+                          <FormControl>
+                            <InputMask
+                              mask={accountType === 'business' ? '99.999.999/9999-99' : '999.999.999-99'}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder={accountType === 'business' ? 'XX.XXX.XXX/XXXX-XX' : 'XXX.XXX.XXX-XX'}
+                            >
+                              {(inputProps: any) => <Input {...inputProps} type="text" />}
+                            </InputMask>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="date_of_birth"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data de Nascimento</FormLabel>
+                          <FormControl><Input type="date" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefone</FormLabel>
+                          <FormControl>
+                            <InputMask
+                              mask={field.value.replace(/\D/g, '').length > 10 ? '(99) 99999-9999' : '(99) 9999-9999'}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="(XX) XXXXX-XXXX"
+                            >
+                              {(inputProps: any) => <Input {...inputProps} type="tel" />}
+                            </InputMask>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="cep"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CEP</FormLabel>
+                          <FormControl>
+                            <InputMask
+                              mask="99999-999"
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="XXXXX-XXX"
+                            >
+                              {(inputProps: any) => <Input {...inputProps} type="text" />}
+                            </InputMask>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Endereço</FormLabel>
+                          <FormControl><Input placeholder="Rua, Avenida, etc." {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="address_number"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número</FormLabel>
+                          <FormControl><Input placeholder="Número" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="address_complement"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Complemento (Opcional)</FormLabel>
+                          <FormControl><Input placeholder="Apto, Bloco, Casa" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signupForm.control}
+                      name="neighborhood"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bairro</FormLabel>
+                          <FormControl><Input placeholder="Bairro" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={signupForm.control}
+                        name="city"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Cidade</FormLabel>
+                            <FormControl><Input placeholder="Cidade" {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={signupForm.control}
+                        name="state"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Estado</FormLabel>
+                            <FormControl><Input placeholder="UF" {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Cadastrar"}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </TabsContent>
+          </Tabs>
+        </CardHeader>
+      </Card>
     </div>
   );
 };

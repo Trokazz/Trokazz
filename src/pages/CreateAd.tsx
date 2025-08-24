@@ -103,10 +103,11 @@ const CreateAd = () => {
     if (selectedCategoryPath.length > 0) {
       const deepestSlug = selectedCategoryPath[selectedCategoryPath.length - 1];
       const currentCategory = allCategories?.find(c => c.slug === deepestSlug);
-      setCategoryConfig(currentCategory?.custom_fields || { hasPriceFilter: true, fields: [] });
+      // Garante que categoryConfig sempre tenha hasPriceFilter e fields definidos
+      setCategoryConfig({ hasPriceFilter: true, fields: [], ...(currentCategory?.custom_fields || {}) });
       form.setValue('category_slug', deepestSlug, { shouldValidate: true });
     } else {
-      setCategoryConfig({ hasPriceFilter: true, fields: [] });
+      setCategoryConfig({ hasPriceFilter: true, fields: [] }); // Default seguro
       form.setValue('category_slug', '', { shouldValidate: true });
     }
   }, [selectedCategoryPath, allCategories, form]);
@@ -229,10 +230,14 @@ const CreateAd = () => {
       }
     });
 
+    console.log("CreateAd: Starting image upload process.");
+    console.log("CreateAd: New image files to upload:", newImageFiles.map(f => f.name));
+
     try {
       // Upload das novas imagens
       const uploadPromises = newImageFiles.map(file => {
         const fileName = `${user.id}/${Date.now()}-${Math.random()}-${file.name}`;
+        console.log(`CreateAd: Attempting to upload file: ${file.name} to path: ${fileName}`);
         return supabase.storage.from("advertisements").upload(fileName, file);
       });
 
@@ -240,6 +245,7 @@ const CreateAd = () => {
 
       const uploadErrors = uploadResults.filter(result => result.error);
       if (uploadErrors.length > 0) {
+        console.error("CreateAd: Errors during image upload:", uploadErrors);
         throw new Error(`Erro no upload de ${uploadErrors.length} imagem(ns): ${uploadErrors[0].error.message}`);
       }
 
@@ -248,8 +254,11 @@ const CreateAd = () => {
         if (result.data?.path) {
           finalImageUrls.push(result.data.path);
           uploadedFilePaths.push(result.data.path); // Rastreia para limpeza
+          console.log(`CreateAd: Successfully uploaded: ${result.data.path}`);
         }
       });
+
+      console.log("CreateAd: All images processed. Final image URLs (relative paths):", finalImageUrls);
 
       // Campos padrão que não devem ir para metadata
       const standardFields = ['title', 'description', 'price', 'images', 'latitude', 'longitude', 'category_slug'];
@@ -260,6 +269,20 @@ const CreateAd = () => {
           metadata[key] = values[key];
         }
       }
+
+      console.log("CreateAd: Inserting advertisement into database with payload:", {
+        title: values.title,
+        description: values.description,
+        price: values.price,
+        category_slug: values.category_slug,
+        image_urls: finalImageUrls,
+        user_id: user.id,
+        metadata: Object.keys(metadata).length > 0 ? metadata : null,
+        latitude: values.latitude,
+        longitude: values.longitude,
+        status: 'approved',
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      });
 
       const { error: insertError } = await supabase
         .from("advertisements")
@@ -277,7 +300,11 @@ const CreateAd = () => {
           expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Define a expiração para 30 dias
         });
 
-      if (insertError) throw new Error(`Erro ao criar o anúncio: ${insertError.message}`);
+      if (insertError) {
+        console.error("CreateAd: Error inserting advertisement:", insertError);
+        throw new Error(`Erro ao criar o anúncio: ${insertError.message}`);
+      }
+      console.log("CreateAd: Advertisement inserted successfully.");
 
       // Lógica para conceder bônus no primeiro anúncio
       const { count, error: adCountError } = await supabase
@@ -286,8 +313,9 @@ const CreateAd = () => {
         .eq('user_id', user.id);
 
       if (adCountError) {
-        console.error("Erro ao contar anúncios do usuário:", adCountError);
+        console.error("CreateAd: Erro ao contar anúncios do usuário para bônus:", adCountError);
       } else if (count === 1) {
+        console.log("CreateAd: First ad detected, granting signup bonus.");
         const { error: creditsInsertError } = await supabase.from("user_credits").insert({ user_id: user.id, balance: 50 });
         if (creditsInsertError) throw creditsInsertError;
 
@@ -303,14 +331,16 @@ const CreateAd = () => {
 
       navigate(`/perfil`);
     } catch (error) {
+      console.error("CreateAd: Caught error during submission:", error);
       // Em caso de erro, tenta remover as imagens que foram recém-enviadas
       if (uploadedFilePaths.length > 0) {
-         await supabase.storage.from("advertisements").remove(uploadedFilePaths).catch(e => console.error("Erro ao limpar imagens após falha:", e));
+         await supabase.storage.from("advertisements").remove(uploadedFilePaths).catch(e => console.error("CreateAd: Erro ao limpar imagens após falha:", e));
       }
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido.");
     } finally {
       setIsSubmitting(false);
+      console.log("CreateAd: Submission process finished.");
     }
   }
 

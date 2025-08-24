@@ -5,6 +5,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { safeFormatDate } from "@/lib/utils";
 import usePageMetadata from "@/hooks/usePageMetadata";
 import DOMPurify from 'dompurify'; // Import DOMPurify
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface GenericPageProps {
   slug: string;
@@ -17,6 +20,7 @@ const fetchPage = async (slug: string) => {
 };
 
 const GenericPage = ({ slug }: GenericPageProps) => {
+  const navigate = useNavigate();
   const { data, isLoading } = useQuery({
     queryKey: ["page", slug],
     queryFn: () => fetchPage(slug),
@@ -38,13 +42,18 @@ const GenericPage = ({ slug }: GenericPageProps) => {
 
   return (
     <Card className="max-w-4xl mx-auto">
-      <CardHeader>
-        {isLoading ? <Skeleton className="h-8 w-1/2" /> : <CardTitle className="text-3xl">{data?.title}</CardTitle>}
-        {data?.updated_at && (
-          <p className="text-sm text-muted-foreground pt-2">
-            Última atualização em: {safeFormatDate(data.updated_at, "dd 'de' LLLL 'de' yyyy")}
-          </p>
-        )}
+      <CardHeader className="flex flex-row items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          {isLoading ? <Skeleton className="h-8 w-1/2" /> : <CardTitle className="text-3xl">{data?.title}</CardTitle>}
+          {data?.updated_at && (
+            <p className="text-sm text-muted-foreground pt-2">
+              Última atualização em: {safeFormatDate(data.updated_at, "dd 'de' LLLL 'de' yyyy")}
+            </p>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (

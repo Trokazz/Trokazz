@@ -37,11 +37,18 @@ const fetchProfileByUsername = async (username: string) => {
     .from("profiles")
     .select(`*, user_badges ( badges ( id, name, description, icon ) )`)
     .eq("username", username)
-    .single();
-  if (profileError || !profileData) {
+    .maybeSingle(); // Alterado para maybeSingle()
+
+  if (profileError) {
     console.error("PublicProfilePage: Error fetching profile:", profileError);
-    throw new Error("Perfil não encontrado.");
+    throw new Error(profileError.message); // Lança o erro real se houver um problema no Supabase
   }
+  
+  if (!profileData) {
+    console.log(`PublicProfilePage: No profile found for username: ${username}`);
+    return null; // Retorna null se nenhum perfil for encontrado
+  }
+  
   console.log("PublicProfilePage: Profile data fetched:", profileData);
   
   let userLevelDetails: UserLevelDetails | null = null;

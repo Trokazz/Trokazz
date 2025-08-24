@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useNavigate } from "react-router-dom";
-import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Zap, Gem, CalendarX, Loader2 } from "lucide-react";
+import { Trash2, Eye, CheckSquare, Pencil, PauseCircle, PlayCircle, Zap, Gem, CalendarX, Loader2, ArrowLeft } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,7 +46,7 @@ const fetchUserAdsData = async (userId: string) => {
   if (creditsError && creditsError.code !== 'PGRST116') throw new Error(`Erro ao buscar créditos: ${creditsError.message}`);
 
   const { data: settings, error: settingsError } = await supabase.from("site_settings").select("key, value");
-  if (settingsError) throw new new Error(settingsError.message);
+  if (settingsError) throw new Error(settingsError.message);
   const siteSettings = settings.reduce((acc, { key, value }) => {
     acc[key] = value;
     return acc;
@@ -182,12 +182,17 @@ const MyAdsPage = () => {
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Meus Anúncios</CardTitle>
-            <CardDescription>Gerencie os anúncios que você publicou.</CardDescription>
-          </div>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
           <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <CardTitle>Meus Anúncios</CardTitle>
+              <CardDescription>Gerencie os anúncios que você publicou.</CardDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap"> {/* Adicionado flex-wrap para melhor responsividade */}
             <div className="flex items-center gap-2 text-lg font-semibold text-primary">
               <Gem className="h-5 w-5" />
               <span>{credits?.balance || 0}</span>

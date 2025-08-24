@@ -208,9 +208,11 @@ const ModerationCenter = () => {
   };
 
   const handleVerificationAction = async (requestId: string, status: 'approved' | 'rejected', reason?: string) => {
+    console.log(`handleVerificationAction: Processing request ${requestId} with status ${status}. Admin user: ${adminUser?.id}`);
     const toastId = showLoading("Processando solicitação...");
     try {
       const { error: requestError } = await supabase.from("verification_requests").update({ status, rejection_reason: reason, reviewed_at: new Date().toISOString(), reviewed_by: adminUser?.id }).eq("id", requestId);
+      console.log("ModerationCenter: Result of verification_requests update:", { requestError }); // Log do erro
       if (requestError) {
         console.error("ModerationCenter: Error updating verification request status:", requestError);
         throw requestError;

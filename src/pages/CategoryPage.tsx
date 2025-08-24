@@ -1,7 +1,1 @@
-import AdsList from './AdsList';
-
-const CategoryPage = () => {
-  return <AdsList />;
-}
-
-export default CategoryPage;
+<dyad-delete path="src/pages/CategoryPage.tsx"></dyad-delete>

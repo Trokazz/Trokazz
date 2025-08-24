@@ -125,18 +125,18 @@ const NotificationsPage = () => {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
+          <div className="flex-grow min-w-0"> {/* Adicionado flex-grow e min-w-0 */}
             <CardTitle>Minhas Notificações</CardTitle>
             <CardDescription>Mantenha-se atualizado sobre as atividades da sua conta.</CardDescription>
           </div>
         </div>
         {notifications && notifications.length > 0 && (
-          <Button variant="outline" size="sm" onClick={handleMarkAllAsRead}>
+          <Button variant="outline" size="sm" onClick={handleMarkAllAsRead} className="flex-shrink-0"> {/* Adicionado flex-shrink-0 */}
             <CheckCircle className="mr-2 h-4 w-4" /> Marcar todas como lidas
           </Button>
         )}

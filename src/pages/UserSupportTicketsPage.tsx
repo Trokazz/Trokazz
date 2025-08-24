@@ -8,8 +8,10 @@ import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
-import { Eye, MessageSquare, Bug, Lightbulb, HelpCircle } from "lucide-react";
+import { Eye, MessageSquare, Bug, Lightbulb, HelpCircle, ArrowLeft } from "lucide-react";
 import { Database } from "@/types/supabase"; // Importar o tipo Database
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 // Usando o tipo gerado pelo Supabase para garantir compatibilidade
 type SupportTicket = Database['public']['Tables']['support_tickets']['Row'];
@@ -26,6 +28,7 @@ const fetchUserTickets = async (userId: string): Promise<SupportTicket[]> => {
 
 const UserSupportTickets = () => {
   const { user } = useSession();
+  const navigate = useNavigate();
   const { data: tickets, isLoading, isError, error } = useQuery<SupportTicket[]>({
     queryKey: ["userSupportTickets", user?.id],
     queryFn: () => fetchUserTickets(user!.id),
@@ -62,9 +65,14 @@ const UserSupportTickets = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Meus Tickets de Suporte</CardTitle>
-        <CardDescription>Acompanhe o status das suas solicitações e feedbacks.</CardDescription>
+      <CardHeader className="flex flex-row items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <CardTitle>Meus Tickets de Suporte</CardTitle>
+          <CardDescription>Acompanhe o status das suas solicitações e feedbacks.</CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

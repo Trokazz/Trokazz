@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Mail, CheckCircle, Loader2 } from "lucide-react";
+import { Mail, CheckCircle, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { useSession } from "@/contexts/SessionContext";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useState } from "react";
 import usePageMetadata from "@/hooks/usePageMetadata";
+import { useNavigate } from "react-router-dom";
 
 const contactSchema = z.object({
   subject: z.string().min(5, "O assunto deve ter pelo menos 5 caracteres."),
@@ -24,6 +25,7 @@ const contactSchema = z.object({
 
 const Contact = () => {
   const { user } = useSession();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
@@ -98,11 +100,16 @@ const Contact = () => {
 
   return (
     <Card className="max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle className="text-3xl">Entre em Contato</CardTitle>
-        <CardDescription>
-          Tem alguma dúvida, sugestão ou problema? Fale conosco.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <CardTitle className="text-3xl">Entre em Contato</CardTitle>
+          <CardDescription>
+            Tem alguma dúvida, sugestão ou problema? Fale conosco.
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isSubmitted ? (

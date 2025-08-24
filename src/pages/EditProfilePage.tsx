@@ -25,7 +25,9 @@ import { getOptimizedImageUrl, getRelativePathFromUrlOrPath, safeFormatDate } fr
 import usePageMetadata from "@/hooks/usePageMetadata";
 import { Database } from "@/types/supabase";
 import { Profile as ProfileType } from "@/types/database";
-import { Skeleton } from "@/components/ui/skeleton"; // Importação adicionada
+import { Skeleton } from "@/components/ui/skeleton";
+import InputMask from 'react-input-mask'; // Importar InputMask
+import axios from 'axios'; // Importar axios
 
 const profileFormSchema = z.object({
   full_name: z.string().min(3, "O nome completo deve ter pelo menos 3 caracteres."),
@@ -33,14 +35,21 @@ const profileFormSchema = z.object({
     .min(3, "O nome de usuário deve ter de 3 a 20 caracteres.")
     .max(20, "O nome de usuário deve ter de 3 a 20 caracteres.")
     .regex(/^[a-z0-9_]+$/, "Use apenas letras minúsculas, números e o caractere '_'.")
-    .optional()
-    .or(z.literal('')),
+    .nonempty("O nome de usuário é obrigatório."),
   phone: z.string().optional().nullable(),
   avatar: z.instanceof(FileList).optional(),
   service_tags: z.string().optional().nullable(),
   account_type: z.enum(["fisica", "juridica"]),
   document_number: z.string().optional().nullable(),
   date_of_birth: z.string().optional().nullable(),
+  // Novos campos de endereço
+  cep: z.string().regex(/^\d{5}-\d{3}$/, "CEP inválido.").nonempty("O CEP é obrigatório."),
+  address: z.string().min(5, "O endereço é obrigatório."),
+  address_number: z.string().min(1, "O número é obrigatório."),
+  address_complement: z.string().optional().or(z.literal('')),
+  neighborhood: z.string().min(2, "O bairro é obrigatório."),
+  city: z.string().min(2, "A cidade é obrigatória."),
+  state: z.string().length(2, "O estado é obrigatório e deve ter 2 letras."),
 });
 
 const fetchProfileDataForEdit = async (userId: string): Promise<ProfileType> => {
@@ -78,11 +87,65 @@ const EditProfilePage = () => {
       account_type: 'fisica',
       document_number: "",
       date_of_birth: "",
+      cep: "",
+      address: "",
+      address_number: "",
+      address_complement: "",
+      neighborhood: "",
+      city: "",
+      state: "",
     },
   });
 
+  // Função para extrair campos de endereço de uma string de endereço combinada
+  const parseAddressString = (fullAddress: string | null) => {
+    if (!fullAddress) return {};
+
+    // Tentativa de parsear o formato: Rua, Número - Complemento, Bairro, Cidade - UF, CEP
+    const parts = fullAddress.split(', ');
+    let address = '';
+    let address_number = '';
+    let address_complement = '';
+    let neighborhood = '';
+    let city = '';
+    let state = '';
+    let cep = '';
+
+    // Exemplo de lógica de parsing (pode precisar de refinamento dependendo da consistência do formato)
+    if (parts.length >= 5) {
+      // CEP é geralmente o último
+      cep = parts.pop()?.match(/\d{5}-\d{3}/)?.[0] || '';
+      
+      // Estado e Cidade
+      const cityState = parts.pop()?.split(' - ');
+      if (cityState) {
+        city = cityState[0] || '';
+        state = cityState[1] || '';
+      }
+
+      neighborhood = parts.pop() || '';
+
+      // Endereço e número/complemento
+      const addressPart = parts.join(', ');
+      const numComplementMatch = addressPart.match(/^(.*),\s*(\d+)\s*(?:-\s*(.*))?$/);
+      if (numComplementMatch) {
+        address = numComplementMatch[1] || '';
+        address_number = numComplementMatch[2] || '';
+        address_complement = numComplementMatch[3] || '';
+      } else {
+        address = addressPart;
+      }
+    } else if (fullAddress.match(/\d{5}-\d{3}/)) { // Fallback se o formato for mais simples
+      cep = fullAddress.match(/\d{5}-\d{3}/)?.[0] || '';
+      // Tenta preencher o resto via ViaCEP se o CEP for encontrado
+    }
+
+    return { address, address_number, address_complement, neighborhood, city, state, cep };
+  };
+
   useEffect(() => {
     if (profile && session?.user) {
+      const parsedAddress = parseAddressString(profile.address);
       profileForm.reset({
         full_name: profile.full_name || session.user.user_metadata?.full_name || "",
         username: profile.username || "",
@@ -90,10 +153,50 @@ const EditProfilePage = () => {
         service_tags: profile.service_tags?.join(', ') || "",
         account_type: profile.account_type === 'fisica' || profile.account_type === 'juridica' ? profile.account_type : 'fisica', 
         document_number: profile.document_number || "",
-        date_of_birth: profile.date_of_birth ? safeFormatDate(profile.date_of_birth, 'dd/MM/yyyy') : "",
+        date_of_birth: profile.date_of_birth ? new Date(profile.date_of_birth).toISOString().split('T')[0] : "",
+        // Preencher campos de endereço
+        cep: parsedAddress.cep || "",
+        address: parsedAddress.address || "",
+        address_number: parsedAddress.address_number || "",
+        address_complement: parsedAddress.address_complement || "",
+        neighborhood: parsedAddress.neighborhood || "",
+        city: parsedAddress.city || "",
+        state: parsedAddress.state || "",
       });
     }
   }, [profile, session?.user, profileForm]);
+
+  const cepValue = profileForm.watch("cep");
+
+  useEffect(() => {
+    const fetchAddress = async () => {
+      const cleanedCep = cepValue.replace(/\D/g, '');
+      if (cleanedCep.length === 8) {
+        try {
+          const response = await axios.get(`https://viacep.com.br/ws/${cleanedCep}/json/`);
+          const data = response.data;
+          if (!data.erro) {
+            profileForm.setValue("address", data.logradouro || "");
+            profileForm.setValue("neighborhood", data.bairro || "");
+            profileForm.setValue("city", data.localidade || "");
+            profileForm.setValue("state", data.uf || "");
+            showSuccess("Endereço preenchido automaticamente!");
+          } else {
+            showError("CEP não encontrado.");
+            profileForm.setValue("address", "");
+            profileForm.setValue("neighborhood", "");
+            profileForm.setValue("city", "");
+            profileForm.setValue("state", "");
+          }
+        } catch (error) {
+          console.error("Erro ao buscar CEP:", error);
+          showError("Erro ao buscar CEP. Tente novamente.");
+        }
+      }
+    };
+
+    fetchAddress();
+  }, [cepValue, profileForm]);
 
   async function onProfileSubmit(values: z.infer<typeof profileFormSchema>) {
     if (!session?.user) return;
@@ -112,28 +215,41 @@ const EditProfilePage = () => {
       const serviceTagsArray = values.service_tags?.split(',').map(tag => tag.trim()).filter(Boolean) || null;
       const accountTypeToSave: Database['public']['Tables']['profiles']['Update']['account_type'] = values.account_type;
 
-      const { error: updateError } = await supabase.from("profiles").upsert({
+      // Combinar campos de endereço em uma única string para o banco de dados
+      const fullAddress = `${values.address}, ${values.address_number}${values.address_complement ? ` - ${values.address_complement}` : ''}, ${values.neighborhood}, ${values.city} - ${values.state}, ${values.cep}`;
+
+      const payload = {
         id: session.user.id,
         full_name: values.full_name,
-        username: values.username || null,
+        username: values.username,
         phone: values.phone,
         avatar_url: avatarPath,
         service_tags: serviceTagsArray,
         account_type: accountTypeToSave,
-      }).select();
+        document_number: profile?.document_number || null, // Manter o valor original
+        date_of_birth: profile?.date_of_birth || null, // Manter o valor original
+        address: fullAddress, // Salvar o endereço combinado
+      };
+
+      console.log("EditProfilePage: Payload enviado para Supabase:", payload);
+
+      const { data: updatedProfile, error: updateError } = await supabase.from("profiles").upsert(payload).select();
 
       if (updateError) {
+        console.error("EditProfilePage: Erro no Supabase ao atualizar perfil:", updateError);
         if (updateError.code === '23505') {
           throw new Error("Este nome de usuário já está em uso. Tente outro.");
         }
         throw updateError;
       }
+      console.log("EditProfilePage: Perfil atualizado com sucesso no Supabase:", updatedProfile);
 
       queryClient.invalidateQueries({ queryKey: ["profileMenuPageData", session?.user?.id] });
       queryClient.invalidateQueries({ queryKey: ["headerProfile", session?.user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["publicProfile"] });
       dismissToast(toastId);
       showSuccess("Perfil atualizado com sucesso!");
-      navigate("/perfil"); // Volta para o menu do perfil
+      navigate("/perfil");
     } catch (error) {
       dismissToast(toastId);
       showError(error);
@@ -272,6 +388,100 @@ const EditProfilePage = () => {
                     )}
                   />
                 </div>
+                
+                {/* Campos de Endereço */}
+                <div className="space-y-4 border-t pt-6">
+                  <h3 className="text-lg font-medium">Endereço</h3>
+                  <FormField
+                    control={profileForm.control}
+                    name="cep"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CEP</FormLabel>
+                        <FormControl>
+                          <InputMask
+                            mask="99999-999"
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="XXXXX-XXX"
+                          >
+                            {(inputProps: any) => <Input {...inputProps} type="text" />}
+                          </InputMask>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Endereço</FormLabel>
+                        <FormControl><Input placeholder="Rua, Avenida, etc." {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="address_number"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Número</FormLabel>
+                        <FormControl><Input placeholder="Número" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="address_complement"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Complemento (Opcional)</FormLabel>
+                        <FormControl><Input placeholder="Apto, Bloco, Casa" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="neighborhood"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bairro</FormLabel>
+                        <FormControl><Input placeholder="Bairro" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={profileForm.control}
+                      name="city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Cidade</FormLabel>
+                          <FormControl><Input placeholder="Cidade" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Estado</FormLabel>
+                          <FormControl><Input placeholder="UF" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? (
                     <>

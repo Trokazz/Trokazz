@@ -54,7 +54,7 @@ const WantedAdsList: React.FC = () => {
 
       <div className="flex justify-center mb-8">
         <Button asChild>
-          <Link to="/procurar/novo">Criar Anúncio de Procura</Link>
+          <Link to="/procura/novo">Criar Anúncio de Procura</Link>
         </Button>
       </div>
 

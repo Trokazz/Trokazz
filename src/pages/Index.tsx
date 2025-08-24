@@ -4,14 +4,14 @@ import AdCard from "@/components/AdCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import PromoBanner from "@/components/PromoBanner";
 import { useSession } from "@/contexts/SessionContext";
-import ActivityFeed from "@/components/ActivityFeed";
 import ErrorState from "@/components/ErrorState";
 import OnboardingCard from "@/components/OnboardingCard";
 import usePageMetadata from "@/hooks/usePageMetadata";
-import { Profile, HomePageData, Advertisement, Category } from "@/types/database"; // Importar Category
-// REMOVIDO: import SearchBar from "@/components/SearchBar";
-import { Link } from "react-router-dom";
-import CategoryGrid from "@/components/CategoryGrid"; // Importar o novo CategoryGrid
+import { Profile, HomePageData, Advertisement, Category } from "@/types/database";
+import { Link, useOutletContext } from "react-router-dom"; // Importar useOutletContext
+import CategoryGrid from "@/components/CategoryGrid";
+import { useIsMobile } from "@/hooks/use-mobile";
+import AdsNearMe from "@/components/AdsNearMe";
 
 type GenericAd = Advertisement & { distance?: number };
 
@@ -58,13 +58,11 @@ const fetchProfileAndAdsForOnboarding = async (userId: string | undefined) => {
   return { profile: profileData as Profile, ads: adsData as Advertisement[] };
 };
 
-// Função para buscar categorias (reutilizada do SubHeader)
 const fetchCategories = async () => {
   const { data, error } = await supabase.from("categories").select("slug, name, icon, parent_slug").order("name");
   if (error) throw new Error(error.message);
   return data;
 };
-
 
 const AdGrid = ({ ads, favoriteIds }: { ads: GenericAd[], favoriteIds: string[] }) => {
   if (ads.length === 0) {
@@ -76,7 +74,7 @@ const AdGrid = ({ ads, favoriteIds }: { ads: GenericAd[], favoriteIds: string[] 
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-6"> {/* Alterado para grid-cols-2 */}
+    <div className="grid grid-cols-2 gap-6">
       {ads.map((ad) => (
         <AdCard key={ad.id} ad={ad} isInitiallyFavorited={favoriteIds?.includes(ad.id)} />
       ))}
@@ -85,7 +83,7 @@ const AdGrid = ({ ads, favoriteIds }: { ads: GenericAd[], favoriteIds: string[] 
 };
 
 const AdGridSkeleton = ({ count = 8 }: { count?: number }) => (
-  <div className="grid grid-cols-2 gap-6"> {/* Alterado para grid-cols-2 */}
+  <div className="grid grid-cols-2 gap-6">
     {Array.from({ length: count }).map((_, i) => (
       <div key={i} className="space-y-2">
         <Skeleton className="h-48 w-full" />
@@ -99,11 +97,13 @@ const AdGridSkeleton = ({ count = 8 }: { count?: number }) => (
 const Index = () => {
   const { user } = useSession();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+  const { showNearbyAds } = useOutletContext<{ showNearbyAds: boolean }>(); // Recebe showNearbyAds do contexto
 
   const { data: homeData, isLoading, isError, error } = useQuery<HomePageData>({
     queryKey: ['homePageData'],
     queryFn: fetchHomePageData,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: categories, isLoading: isLoadingCategories } = useQuery<Category[]>({
@@ -137,7 +137,6 @@ const Index = () => {
 
   return (
     <div className="space-y-8">
-      {/* REMOVIDO: <SearchBar /> */}
       {user && (
         <OnboardingCard
           profile={userOnboardingData?.profile}
@@ -147,8 +146,12 @@ const Index = () => {
       )}
       <PromoBanner banners={homeData?.banners} isLoading={isLoading} />
       
-      {/* Agora usa CategoryGrid para todas as visualizações */}
-      <CategoryGrid categories={categories} isLoading={isLoadingCategories} />
+      {isMobile && <CategoryGrid categories={categories} isLoading={isLoadingCategories} />}
+
+      {/* Renderiza AdsNearMe se showNearbyAds for true */}
+      {showNearbyAds && (
+        <AdsNearMe favoriteIds={favoriteIds || []} isEnabled={showNearbyAds} />
+      )}
 
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold">Anúncios populares</h2>
@@ -164,10 +167,6 @@ const Index = () => {
             <AdGrid ads={homeData?.ads || []} favoriteIds={favoriteIds || []} />
           )}
       </section>
-
-      <aside className="lg:col-span-1 lg:sticky lg:top-24 space-y-8">
-          <ActivityFeed activities={homeData?.activity_feed} isLoading={isLoading} />
-      </aside>
     </div>
   );
 };

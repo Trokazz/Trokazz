@@ -73,7 +73,7 @@ const Inbox = () => {
             </div>
           ))}
           {!isLoading && conversations?.length === 0 && (
-            <p className="text-center text-muted-foreground py-8">Nenhuma conversa encontrada.</p>
+            <p className="text-center text-muted-foreground py-8">Você não possui mensagens.</p>
           )}
           {conversations?.map((convo) => {
             const otherUser = convo.buyer?.id === user?.id ? convo.seller : convo.buyer;
