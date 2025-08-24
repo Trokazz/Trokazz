@@ -5,24 +5,42 @@ export const showSuccess = (message: string) => {
 };
 
 export const showError = (error: any) => {
-  let errorMessage = "Ocorreu um erro desconhecido. Tente novamente.";
+  let errorMessage = "Ocorreu um erro desconhecido. Por favor, tente novamente.";
   
-  if (typeof error === 'string') {
-    errorMessage = error;
-  } else if (error && typeof error.message === 'string') {
-    errorMessage = error.message;
-    // Check for more specific Supabase error details
+  // Log the full error object for debugging purposes in the console
+  console.error("ERRO CAPTURADO:", error);
+
+  // Priorize mensagens de erro específicas do Supabase ou de Edge Functions
+  if (error && typeof error === 'object') {
+    if (error.message) {
+      errorMessage = error.message;
+    }
     if (error.details) {
       errorMessage += ` Detalhes: ${error.details}`;
     }
     if (error.hint) {
       errorMessage += ` Dica: ${error.hint}`;
     }
-  } else if (error && error.context?.json?.error) { // For edge function errors
-    errorMessage = error.context.json.error;
+    // Lida com erros específicos de autenticação do Supabase
+    if (error.status === 400 && error.message === 'User already registered') {
+      errorMessage = 'Este e-mail já está cadastrado. Por favor, faça login ou use outro e-mail.';
+    }
+    // Lida com erros de Edge Functions (vindos de supabase.functions.invoke)
+    if (error.context?.json?.error) {
+      errorMessage = error.context.json.error;
+    }
+  } else if (typeof error === 'string') {
+    errorMessage = error;
   }
 
-  console.error("ERRO CAPTURADO:", error);
+  // Em produção, mostra uma mensagem mais genérica para segurança/experiência do usuário
+  if (import.meta.env.PROD) {
+    // Se a mensagem extraída for muito técnica, reverte para uma genérica
+    if (errorMessage.includes("Supabase") || errorMessage.includes("database") || errorMessage.includes("PGRST")) {
+      errorMessage = "Ocorreu um erro ao salvar seus dados. Por favor, tente novamente.";
+    }
+  }
+
   toast.error(errorMessage);
 };
 

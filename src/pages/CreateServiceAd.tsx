@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useState } from "react";
+import { Loader2 } from "lucide-react"; // Importar Loader2
 
 const serviceAdSchema = z.object({
   title: z.string().min(5, "O título deve ter pelo menos 5 caracteres."),
@@ -59,14 +60,13 @@ const CreateServiceAd = () => {
     const toastId = showLoading("Publicando seu serviço...");
 
     try {
-      let imageUrl: string | undefined;
+      let imagePath: string | undefined; // Armazena o caminho relativo
       const imageFile = values.image?.[0];
       if (imageFile) {
         const fileName = `${user.id}/${Date.now()}-${imageFile.name}`;
         const { error: uploadError } = await supabase.storage.from("service_images").upload(fileName, imageFile);
         if (uploadError) throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
-        const { data: { publicUrl } } = supabase.storage.from("service_images").getPublicUrl(fileName);
-        imageUrl = publicUrl;
+        imagePath = fileName; // Armazena o caminho relativo
       }
 
       const { error: insertError } = await supabase.from("services").insert({
@@ -76,7 +76,7 @@ const CreateServiceAd = () => {
         category_slug: 'servicos',
         pricing_type: values.pricing_type,
         price: values.pricing_type !== 'on_quote' ? values.price : null,
-        image_url: imageUrl,
+        image_url: imagePath, // Salva o caminho relativo
       });
 
       if (insertError) throw new Error(`Erro ao criar o serviço: ${insertError.message}`);
@@ -149,7 +149,13 @@ const CreateServiceAd = () => {
               </FormItem>
             )} />
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Publicando..." : "Publicar Serviço"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Publicando...
+                </>
+              ) : (
+                "Publicar Serviço"
+              )}
             </Button>
           </form>
         </Form>

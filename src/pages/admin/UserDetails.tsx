@@ -7,25 +7,30 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { safeFormatDate, safeFormatDistanceToNow } from "@/lib/utils";
-import { User, Newspaper, ShieldAlert, ExternalLink, Handshake, MessagesSquare, Heart, ShieldX, PlusCircle, Ban, CheckCircle, Gem } from "lucide-react";
+import { safeFormatDate, safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
+import { User, Newspaper, ShieldAlert, ExternalLink, Handshake, MessagesSquare, Heart, ShieldX, PlusCircle, Ban, CheckCircle, Gem, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import AddViolationDialog from "@/components/admin/AddViolationDialog";
-import SendCreditsDialog from "@/components/admin/SendCreditsDialog"; // Importado o novo diálogo
+import SendCreditsDialog from "@/components/admin/SendCreditsDialog";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
+import * as Icons from "lucide-react";
+import { UserLevelDetails } from "@/types/database"; // Importar UserLevelDetails
 
 const fetchUserDetailsAndActivity = async (userId: string) => {
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select(`
+      *,
+      userLevelDetails:user_levels ( * )
+    `)
     .eq("id", userId)
     .single();
   if (profileError) throw new Error(`Erro ao buscar perfil: ${profileError.message}`);
 
   const { data: ads, error: adsError } = await supabase
     .from("advertisements")
-    .select("*")
+    .select("id, title, price, created_at, image_urls, status, view_count, boosted_until, expires_at, last_renewed_at, metadata, latitude, longitude, flag_reason, user_id")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (adsError) throw new Error(`Erro ao buscar anúncios: ${adsError.message}`);
@@ -35,7 +40,7 @@ const fetchUserDetailsAndActivity = async (userId: string) => {
   if (adIds.length > 0) {
     const { data: reportsData, error: reportsError } = await supabase
       .from("reports")
-      .select("*, advertisements(title)")
+      .select("id, ad_id, reporter_id, reason, status, created_at, advertisements(title)")
       .in("ad_id", adIds)
       .order("created_at", { ascending: false });
     if (reportsError) throw new Error(`Erro ao buscar denúncias: ${reportsError.message}`);
@@ -59,28 +64,28 @@ const fetchUserDetailsAndActivity = async (userId: string) => {
 
   const { data: offers, error: offersError } = await supabase
     .from("offers")
-    .select("*, advertisements(title), buyer:profiles!offers_buyer_id_fkey(full_name), seller:profiles!offers_seller_id_fkey(full_name)")
+    .select("id, ad_id, buyer_id, seller_id, offer_amount, status, created_at, updated_at, advertisements(title), buyer:profiles!offers_buyer_id_fkey(full_name), seller:profiles!offers_seller_id_fkey(full_name)")
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("created_at", { ascending: false });
   if (offersError) throw new Error(`Erro ao buscar ofertas: ${offersError.message}`);
 
   const { data: conversations, error: conversationsError } = await supabase
     .from("conversations")
-    .select("*, advertisements(title), buyer:profiles!conversations_buyer_id_fkey(full_name), seller:profiles!conversations_seller_id_fkey(full_name)")
+    .select("id, ad_id, buyer_id, seller_id, conversation_type, created_at, last_message_at, wanted_ad_id, advertisements(title), buyer:profiles!conversations_buyer_id_fkey(full_name), seller:profiles!conversations_seller_id_fkey(full_name)")
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("last_message_at", { ascending: false });
   if (conversationsError) throw new Error(`Erro ao buscar conversas: ${conversationsError.message}`);
 
   const { data: favorites, error: favoritesError } = await supabase
     .from("favorites")
-    .select("*, advertisements(title, price)")
+    .select("user_id, ad_id, created_at, advertisements(title, price)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (favoritesError) throw new Error(`Erro ao buscar favoritos: ${favoritesError.message}`);
 
   const { data: violationsData, error: violationsError } = await supabase
     .from("violations")
-    .select("*")
+    .select("id, user_id, admin_id, reason, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (violationsError) throw new Error(`Erro ao buscar violações: ${violationsError.message}`);
@@ -100,7 +105,6 @@ const fetchUserDetailsAndActivity = async (userId: string) => {
     }));
   }
 
-  // Adicionado: Busca o saldo de créditos do usuário
   const { data: creditsData, error: creditsError } = await supabase
     .from("user_credits")
     .select("balance")
@@ -108,14 +112,21 @@ const fetchUserDetailsAndActivity = async (userId: string) => {
     .single();
   if (creditsError && creditsError.code !== 'PGRST116') throw new Error(`Erro ao buscar créditos: ${creditsError.message}`);
 
+  const { data: creditTransactions, error: creditTransactionsError } = await supabase
+    .from("credit_transactions")
+    .select("id, user_id, amount, type, description, related_ad_id, stripe_payment_intent_id, created_at, advertisements(title)")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (creditTransactionsError) throw new Error(`Erro ao buscar transações de crédito: ${creditTransactionsError.message}`);
 
-  return { profile, ads, reportsAgainstUser, offers, conversations, favorites, violations, credits: creditsData || { balance: 0 } };
+
+  return { profile, ads, reportsAgainstUser, offers, conversations, favorites, violations, credits: creditsData || { balance: 0 }, creditTransactions };
 };
 
 const UserDetails = () => {
   const { id } = useParams<{ id: string }>();
   const [isViolationDialogOpen, setIsViolationDialogOpen] = useState(false);
-  const [isSendCreditsDialogOpen, setIsSendCreditsDialogOpen] = useState(false); // Novo estado
+  const [isSendCreditsDialogOpen, setIsSendCreditsDialogOpen] = useState(false);
   const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["userDetails", id],
@@ -162,6 +173,16 @@ const UserDetails = () => {
     }
   };
 
+  const getTransactionTypeDisplay = (type: string, description: string | null, adTitle: string | null) => {
+    switch (type) {
+      case 'purchase': return `Compra: ${description || 'Pacote de créditos'}`;
+      case 'boost_ad': return `Impulsionamento de Anúncio: ${adTitle || 'Anúncio removido'}`;
+      case 'signup_bonus': return `Bônus de Cadastro: ${description || 'Primeiro anúncio'}`;
+      case 'admin_add': return `Adicionado por Admin: ${description || 'Motivo não especificado'}`;
+      default: return description || type;
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -173,6 +194,11 @@ const UserDetails = () => {
 
   if (isError) return <div className="text-center py-10 text-red-500">Erro: {error.message}</div>;
 
+  const avatarUrl = data?.profile.avatar_url ? getOptimizedImageUrl(data.profile.avatar_url, { width: 160, height: 160 }, 'avatars') : undefined;
+  // Corrigido: Cast explícito para unknown antes de UserLevelDetails
+  const userLevelDetails = data?.profile.userLevelDetails as unknown as UserLevelDetails | null | undefined;
+  const LevelIcon = userLevelDetails?.badge_icon ? (Icons as any)[userLevelDetails.badge_icon] || Icons.HelpCircle : Icons.User;
+
   return (
     <div className="space-y-6">
       <Card>
@@ -180,7 +206,7 @@ const UserDetails = () => {
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
-                <AvatarImage src={data?.profile.avatar_url} />
+                <AvatarImage src={avatarUrl} />
                 <AvatarFallback>{data?.profile.full_name?.[0] || 'U'}</AvatarFallback>
               </Avatar>
               <div>
@@ -201,7 +227,7 @@ const UserDetails = () => {
               <Button onClick={() => setIsViolationDialogOpen(true)} variant="destructive">
                 <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Advertência
               </Button>
-              <Button onClick={() => setIsSendCreditsDialogOpen(true)} variant="secondary"> {/* Novo botão */}
+              <Button onClick={() => setIsSendCreditsDialogOpen(true)} variant="secondary">
                 <Gem className="mr-2 h-4 w-4" /> Enviar Créditos
               </Button>
             </div>
@@ -237,23 +263,38 @@ const UserDetails = () => {
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-            <Gem className="h-6 w-6 text-muted-foreground" /> {/* Ícone de créditos */}
+            <Gem className="h-6 w-6 text-muted-foreground" />
             <div>
               <p className="text-sm text-muted-foreground">Créditos</p>
-              <p className="font-semibold">{data?.credits?.balance || 0}</p> {/* Exibe o saldo */}
+              <p className="font-semibold">{data?.credits?.balance || 0}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+            <LevelIcon className="h-6 w-6 text-muted-foreground" />
+            <div>
+              <p className="text-sm text-muted-foreground">Nível do Usuário</p>
+              <p className="font-semibold capitalize">{userLevelDetails?.level_name || 'N/A'}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+            <Star className="h-6 w-6 text-muted-foreground" />
+            <div>
+              <p className="text-sm text-muted-foreground">Reputação</p>
+              <p className="font-semibold">{data?.profile.reputation_score?.toFixed(0) || 0}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
       <Tabs defaultValue="violations">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
           <TabsTrigger value="violations">Advertências</TabsTrigger>
           <TabsTrigger value="ads">Anúncios</TabsTrigger>
           <TabsTrigger value="offers">Ofertas</TabsTrigger>
           <TabsTrigger value="conversations">Conversas</TabsTrigger>
           <TabsTrigger value="favorites">Favoritos</TabsTrigger>
           <TabsTrigger value="reports">Denúncias</TabsTrigger>
+          <TabsTrigger value="credit-transactions">Créditos</TabsTrigger>
         </TabsList>
         <TabsContent value="violations">
           <Card>
@@ -377,6 +418,41 @@ const UserDetails = () => {
                     </TableRow>
                   ))}
                   {data?.reportsAgainstUser.length === 0 && <TableRow><TableCell colSpan={4} className="text-center">Nenhuma denúncia recebida.</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="credit-transactions">
+          <Card>
+            <CardHeader><CardTitle>Histórico de Transações de Crédito</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Tipo</TableHead><TableHead>Créditos</TableHead><TableHead>Descrição</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {data?.creditTransactions.map((transaction: any) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell className="font-medium">
+                        {getTransactionTypeDisplay(transaction.type, transaction.description, transaction.advertisements?.title)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={transaction.amount > 0 ? "default" : "destructive"}>
+                          {transaction.amount > 0 ? `+${transaction.amount}` : transaction.amount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {transaction.type === 'boost_ad' && transaction.related_ad_id ? (
+                          <Link to={`/anuncio/${transaction.related_ad_id}`} target="_blank" className="hover:underline">
+                            {transaction.advertisements?.title || 'Anúncio removido'}
+                          </Link>
+                        ) : (
+                          transaction.description
+                        )}
+                      </TableCell>
+                      <TableCell>{safeFormatDate(transaction.created_at, "dd/MM/yyyy HH:mm")}</TableCell>
+                    </TableRow>
+                  ))}
+                  {data?.creditTransactions.length === 0 && <TableRow><TableCell colSpan={4} className="text-center">Nenhuma transação de crédito encontrada.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>

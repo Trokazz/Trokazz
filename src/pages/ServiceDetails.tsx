@@ -66,7 +66,7 @@ const ServiceDetails = () => {
       <Card className="overflow-hidden">
         <div className="grid md:grid-cols-5">
           <div className="md:col-span-3">
-            <img src={getOptimizedImageUrl(service.image_url, { width: 800, height: 800 }) || '/placeholder.svg'} alt={service.title} className="w-full h-full object-cover aspect-square" />
+            <img src={getOptimizedImageUrl(service.image_url, { width: 800, height: 800 }, 'service_images') || '/placeholder.svg'} alt={service.title} className="w-full h-full object-cover aspect-square" />
           </div>
           <div className="md:col-span-2 p-6 flex flex-col">
             <CardHeader className="p-0 mb-4">

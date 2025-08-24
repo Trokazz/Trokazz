@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom"; // Adicionado useNavigate
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/contexts/SessionContext";
@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Send, ArrowLeft, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
-import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast"; // Adicionado showLoading e dismissToast
+import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,38 +21,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"; // Adicionado AlertDialog
+} from "@/components/ui/alert-dialog";
+import { Database } from "@/types/supabase"; // Importar o tipo Database
+import { ConversationWithDetails as FullConversationDetails } from "@/types/database"; // Importa o tipo completo
 
-type Message = {
-  id: string;
-  content: string;
-  created_at: string;
-  sender_id: string;
-  is_read: boolean;
-  profiles: {
-    full_name: string | null;
-    avatar_url: string | null;
-  } | null;
+// Definindo um tipo preciso para o resultado da query de mensagens
+type MessageQueryResult = Pick<Database['public']['Tables']['messages']['Row'], 'id' | 'content' | 'created_at' | 'sender_id' | 'is_read'> & {
+  profiles: Pick<Database['public']['Tables']['profiles']['Row'], 'full_name' | 'avatar_url'> | null;
 };
 
-// Definindo um tipo mais abrangente para a conversa
-type ConversationDetails = {
-  id: string;
-  conversation_type: 'ad_chat' | 'wanted_ad_chat';
-  advertisements: { // Corrigido para objeto único
-    id: string;
-    title: string | null;
-    image_urls: string[] | null;
-  } | null;
-  wanted_ads: { // Corrigido para objeto único
-    id: string;
-    title: string | null;
-  } | null;
-  buyer: { id: string; full_name: string | null; avatar_url: string | null; } | null;
-  seller: { id: string; full_name: string | null; avatar_url: string | null; } | null;
+// Definindo um tipo preciso para o resultado da query de detalhes da conversa
+type ConversationDetailsQueryResult = Pick<Database['public']['Tables']['conversations']['Row'], 'id' | 'conversation_type'> & {
+  advertisements: Pick<Database['public']['Tables']['advertisements']['Row'], 'id' | 'title' | 'image_urls'> | null;
+  wanted_ads: Pick<Database['public']['Tables']['wanted_ads']['Row'], 'id' | 'title'> | null;
+  buyer: Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'full_name' | 'avatar_url'> | null;
+  seller: Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'full_name' | 'avatar_url'> | null;
 };
 
-const fetchConversationDetails = async (conversationId: string): Promise<ConversationDetails | null> => {
+const fetchConversationDetails = async (conversationId: string): Promise<ConversationDetailsQueryResult | null> => {
   const { data, error } = await supabase
     .from("conversations")
     .select(`
@@ -74,10 +60,10 @@ const fetchConversationDetails = async (conversationId: string): Promise<Convers
     wanted_ads: data.wanted_ads && Array.isArray(data.wanted_ads) ? data.wanted_ads[0] : data.wanted_ads,
     buyer: data.buyer && Array.isArray(data.buyer) ? data.buyer[0] : data.buyer,
     seller: data.seller && Array.isArray(data.seller) ? data.seller[0] : data.seller,
-  } as ConversationDetails;
+  } as ConversationDetailsQueryResult;
 };
 
-const fetchMessages = async (conversationId: string) => {
+const fetchMessages = async (conversationId: string): Promise<MessageQueryResult[]> => {
   const { data, error } = await supabase
     .from("messages")
     .select(`
@@ -91,24 +77,24 @@ const fetchMessages = async (conversationId: string) => {
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data as unknown as Message[];
+  return data as MessageQueryResult[];
 };
 
 const Conversation = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useSession();
   const queryClient = useQueryClient();
-  const navigate = useNavigate(); // Inicializado useNavigate
+  const navigate = useNavigate();
   const [newMessage, setNewMessage] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null); // Corrigido: HTMLDivVElement para HTMLDivElement
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: conversation, isLoading: isLoadingConvo } = useQuery<ConversationDetails | null>({
+  const { data: conversation, isLoading: isLoadingConvo } = useQuery<ConversationDetailsQueryResult | null>({
     queryKey: ["conversationDetails", conversationId],
     queryFn: () => fetchConversationDetails(conversationId!),
     enabled: !!conversationId,
   });
 
-  const { data: messages, isLoading: isLoadingMessages } = useQuery({
+  const { data: messages, isLoading: isLoadingMessages } = useQuery<MessageQueryResult[]>({
     queryKey: ["messages", conversationId],
     queryFn: () => fetchMessages(conversationId!),
     enabled: !!conversationId,
@@ -147,7 +133,7 @@ const Conversation = () => {
       .channel(`chat:${conversationId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
+        { event: '*', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
         () => {
           queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
           queryClient.invalidateQueries({ queryKey: ["conversations", user.id] });
@@ -170,13 +156,8 @@ const Conversation = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Tentando enviar mensagem...");
-    console.log("newMessage:", newMessage);
-    console.log("user:", user);
-    console.log("conversationId:", conversationId);
 
     if (newMessage.trim() === "" || !user || !conversationId) {
-      console.log("Pré-condição falhou: mensagem vazia, usuário ou ID da conversa ausente.");
       return;
     }
 
@@ -190,12 +171,8 @@ const Conversation = () => {
     });
 
     if (error) {
-      console.error("Erro ao enviar mensagem para o Supabase:", error);
-      showError("Erro ao enviar mensagem: " + error.message); // Exibe o erro para o usuário
+      showError("Erro ao enviar mensagem: " + error.message);
       setNewMessage(content); // Restaura o conteúdo do input em caso de erro
-    } else {
-      console.log("Mensagem enviada com sucesso para o Supabase.");
-      // A assinatura em tempo real deve lidar com a re-busca e exibição
     }
   };
 
@@ -263,9 +240,9 @@ const Conversation = () => {
             <Skeleton className="h-5 w-32" />
           </div>
         ) : otherUser && (
-          <div className="flex items-center gap-2 flex-grow"> {/* Adicionado flex-grow */}
+          <div className="flex items-center gap-2 flex-grow">
             <Avatar>
-              <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 80, height: 80 })} />
+              <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 80, height: 80 }, 'avatars')} />
               <AvatarFallback>{otherUser.full_name?.[0] || 'U'}</AvatarFallback>
             </Avatar>
             <div>
@@ -280,7 +257,7 @@ const Conversation = () => {
         {/* Botão de apagar conversa */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-destructive ml-auto"> {/* Adicionado ml-auto */}
+            <Button variant="ghost" size="icon" className="text-destructive ml-auto">
               <Trash2 className="h-5 w-5" />
             </Button>
           </AlertDialogTrigger>
@@ -323,7 +300,7 @@ const Conversation = () => {
             )}
             {message.sender_id !== user?.id && (
               <Avatar className="h-8 w-8">
-                <AvatarImage src={getOptimizedImageUrl(message.profiles?.avatar_url, { width: 64, height: 64 })} />
+                <AvatarImage src={getOptimizedImageUrl(message.profiles?.avatar_url, { width: 64, height: 64 }, 'avatars')} />
                 <AvatarFallback>{message.profiles?.full_name?.[0] || 'U'}</AvatarFallback>
               </Avatar>
             )}

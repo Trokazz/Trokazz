@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Edit, Search, ArrowUp, ArrowDown } from "lucide-react";
+import { Trash2, Edit, Search, ArrowUp, ArrowDown, Loader2 } from "lucide-react"; // Importar Loader2
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,13 +22,16 @@ import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PaginationControls } from "@/components/PaginationControls";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { getRelativePathFromUrlOrPath } from "@/lib/utils"; // Importar a nova função
 
 const ADS_PER_PAGE = 20;
 
 const fetchAllAds = async ({ filters, sorting, page }: { filters: any, sorting: any, page: number }) => {
   let query = supabase
     .from("advertisements")
-    .select("*, profiles(full_name)", { count: 'exact' })
+    .select("id, title, price, created_at, image_urls, status, profiles(full_name)", { count: 'exact' }) // Otimizado aqui
     .order(sorting.column, { ascending: sorting.order === 'asc' });
 
   if (filters.status !== 'all') {
@@ -50,6 +53,8 @@ const ManageAds = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({ status: 'all' });
   const [sorting, setSorting] = useState({ column: 'created_at', order: 'desc' });
+  const [selectedAdIds, setSelectedAdIds] = useState<string[]>([]);
+  const [isBulkActionLoading, setIsBulkActionLoading] = useState(false); // Novo estado de carregamento para ações em massa
 
   const currentPage = Number(searchParams.get("page") || "1");
 
@@ -80,7 +85,8 @@ const ManageAds = () => {
     const toastId = showLoading("Excluindo anúncio...");
     try {
       if (imageUrls && imageUrls.length > 0) {
-        const imagePaths = imageUrls.map(url => url.split("/advertisements/")[1]).filter(Boolean);
+        // Converte as URLs públicas existentes para caminhos relativos antes de remover
+        const imagePaths = imageUrls.map(url => getRelativePathFromUrlOrPath(url, 'advertisements')).filter(Boolean);
         if (imagePaths.length > 0) {
           await supabase.storage.from("advertisements").remove(imagePaths);
         }
@@ -95,6 +101,70 @@ const ManageAds = () => {
     } catch (error) {
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Erro ao excluir anúncio.");
+    }
+  };
+
+  const handleCheckboxChange = (adId: string, checked: boolean) => {
+    setSelectedAdIds(prev => 
+      checked ? [...prev, adId] : prev.filter(id => id !== adId)
+    );
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedAdIds(filteredAds.map(ad => ad.id));
+    } else {
+      setSelectedAdIds([]);
+    }
+  };
+
+  const handleBulkAction = async (action: 'approve' | 'reject' | 'delete') => {
+    if (selectedAdIds.length === 0) {
+      showError("Nenhum anúncio selecionado.");
+      return;
+    }
+
+    setIsBulkActionLoading(true); // Ativa o estado de carregamento
+    const toastId = showLoading(`Executando ação em ${selectedAdIds.length} anúncios...`);
+    try {
+      if (action === 'delete') {
+        // Fetch image URLs for selected ads to delete from storage
+        const { data: adsToDelete, error: fetchError } = await supabase
+          .from('advertisements')
+          .select('id, image_urls')
+          .in('id', selectedAdIds);
+
+        if (fetchError) throw fetchError;
+
+        for (const ad of adsToDelete) {
+          if (ad.image_urls && ad.image_urls.length > 0) {
+            // Converte as URLs públicas existentes para caminhos relativos antes de remover
+            const imagePaths = ad.image_urls.map(url => getRelativePathFromUrlOrPath(url, 'advertisements')).filter(Boolean);
+            if (imagePaths.length > 0) {
+              await supabase.storage.from("advertisements").remove(imagePaths);
+            }
+          }
+        }
+        const { error } = await supabase.from("advertisements").delete().in("id", selectedAdIds);
+        if (error) throw error;
+        showSuccess("Anúncios excluídos com sucesso!");
+      } else {
+        const newStatus = action === 'approve' ? 'approved' : 'rejected';
+        const { error } = await supabase.from("advertisements").update({ status: newStatus }).in("id", selectedAdIds);
+        if (error) throw error;
+        showSuccess(`Anúncios ${action === 'approve' ? 'aprovados' : 'rejeitados'} com sucesso!`);
+      }
+
+      dismissToast(toastId);
+      setSelectedAdIds([]); // Clear selection
+      queryClient.invalidateQueries({ queryKey: ["allAds"] });
+      queryClient.invalidateQueries({ queryKey: ["adminStats"] });
+      queryClient.invalidateQueries({ queryKey: ["moderationQueue"] }); // Invalidate moderation queue as well
+    } catch (error) {
+      dismissToast(toastId);
+      showError(error instanceof Error ? error.message : "Erro ao executar ação em massa.");
+    } finally {
+      setIsBulkActionLoading(false); // Desativa o estado de carregamento
     }
   };
 
@@ -137,6 +207,26 @@ const ManageAds = () => {
               <SelectItem value="paused">Pausado</SelectItem>
             </SelectContent>
           </Select>
+          {selectedAdIds.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto" disabled={isBulkActionLoading}>
+                  {isBulkActionLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...
+                    </>
+                  ) : (
+                    `Ações em Massa (${selectedAdIds.length})`
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleBulkAction('approve')} disabled={isBulkActionLoading}>Aprovar Selecionados</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBulkAction('reject')} disabled={isBulkActionLoading}>Rejeitar Selecionados</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBulkAction('delete')} disabled={isBulkActionLoading} className="text-destructive">Excluir Selecionados</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -144,6 +234,13 @@ const ManageAds = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[40px]">
+                  <Checkbox
+                    checked={selectedAdIds.length === filteredAds.length && (filteredAds.length || 0) > 0}
+                    onCheckedChange={(checked: boolean) => handleSelectAll(checked)}
+                    disabled={filteredAds.length === 0 || isBulkActionLoading}
+                  />
+                </TableHead>
                 <SortableHeader column="title" label="Título" />
                 <TableHead>Usuário</TableHead>
                 <SortableHeader column="price" label="Preço" />
@@ -154,6 +251,7 @@ const ManageAds = () => {
             <TableBody>
               {isLoading && Array.from({ length: 10 }).map((_, i) => (
                 <TableRow key={i}>
+                  <TableCell><Skeleton className="h-5 w-5" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>
@@ -163,6 +261,13 @@ const ManageAds = () => {
               ))}
               {filteredAds.map((ad: any) => (
                 <TableRow key={ad.id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedAdIds.includes(ad.id)}
+                      onCheckedChange={(checked: boolean) => handleCheckboxChange(ad.id, checked)}
+                      disabled={isBulkActionLoading}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{ad.title}</TableCell>
                   <TableCell>{ad.profiles?.full_name || 'N/A'}</TableCell>
                   <TableCell>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(ad.price)}</TableCell>

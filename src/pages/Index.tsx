@@ -1,22 +1,29 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import AdCard, { Advertisement } from "@/components/AdCard"; // Importa Advertisement do AdCard para o AdGrid
+import AdCard from "@/components/AdCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import PromoBanner from "@/components/PromoBanner";
 import { useSession } from "@/contexts/SessionContext";
 import ActivityFeed from "@/components/ActivityFeed";
-import AdStories from "@/components/AdStories";
 import ErrorState from "@/components/ErrorState";
-import OnboardingCard from "@/components/OnboardingCard"; // Importando o novo componente
+import OnboardingCard from "@/components/OnboardingCard";
 import usePageMetadata from "@/hooks/usePageMetadata";
-import { Profile, Advertisement as FullAdvertisementType } from "@/types/database"; // Importa Profile e Advertisement completo do types/database
+import { Profile, HomePageData, Advertisement, Category } from "@/types/database"; // Importar Category
+// REMOVIDO: import SearchBar from "@/components/SearchBar";
+import { Link } from "react-router-dom";
+import CategoryGrid from "@/components/CategoryGrid"; // Importar o novo CategoryGrid
 
 type GenericAd = Advertisement & { distance?: number };
 
-const fetchHomePageData = async () => {
+const fetchHomePageData = async (): Promise<HomePageData> => {
+  console.log("Chamando supabase.rpc('get_home_page_data')...");
   const { data, error } = await supabase.rpc('get_home_page_data');
-  if (error) throw new Error("Falha ao carregar os dados da página inicial.");
-  return data;
+  if (error) {
+    console.error("Erro na RPC get_home_page_data:", error);
+    throw new Error("Falha ao carregar os dados da página inicial.");
+  }
+  console.log("Dados da RPC get_home_page_data recebidos:", data);
+  return data as HomePageData;
 };
 
 const fetchUserFavoriteIds = async (userId: string | undefined) => {
@@ -26,30 +33,36 @@ const fetchUserFavoriteIds = async (userId: string | undefined) => {
   return data.map(fav => fav.ad_id);
 };
 
-// Nova função para buscar dados do perfil e anúncios do usuário logado
 const fetchProfileAndAdsForOnboarding = async (userId: string | undefined) => {
   if (!userId) return { profile: null, ads: null };
 
   const { data: profileData, error: profileError } = await supabase
     .from("profiles")
-    .select("*") // Seleciona todos os campos para corresponder ao tipo Profile
+    .select("*")
     .eq("id", userId)
     .single();
 
-  if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = nenhuma linha encontrada
+  if (profileError && profileError.code !== 'PGRST116') {
     throw profileError;
   }
 
   const { data: adsData, error: adsError } = await supabase
     .from("advertisements")
-    .select("id, title, description, price, image_urls, created_at, user_id, category_slug, status, view_count, boosted_until, last_renewed_at, metadata, latitude, longitude, flag_reason, expires_at") // Seleciona todos os campos necessários para FullAdvertisementType
+    .select("id, title, description, price, image_urls, created_at, user_id, category_slug, status, view_count, boosted_until, last_renewed_at, metadata, latitude, longitude, flag_reason, expires_at")
     .eq("user_id", userId);
 
   if (adsError) {
     throw adsError;
   }
 
-  return { profile: profileData as Profile, ads: adsData as FullAdvertisementType[] };
+  return { profile: profileData as Profile, ads: adsData as Advertisement[] };
+};
+
+// Função para buscar categorias (reutilizada do SubHeader)
+const fetchCategories = async () => {
+  const { data, error } = await supabase.from("categories").select("slug, name, icon, parent_slug").order("name");
+  if (error) throw new Error(error.message);
+  return data;
 };
 
 
@@ -63,7 +76,7 @@ const AdGrid = ({ ads, favoriteIds }: { ads: GenericAd[], favoriteIds: string[] 
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 gap-6"> {/* Alterado para grid-cols-2 */}
       {ads.map((ad) => (
         <AdCard key={ad.id} ad={ad} isInitiallyFavorited={favoriteIds?.includes(ad.id)} />
       ))}
@@ -72,7 +85,7 @@ const AdGrid = ({ ads, favoriteIds }: { ads: GenericAd[], favoriteIds: string[] 
 };
 
 const AdGridSkeleton = ({ count = 8 }: { count?: number }) => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+  <div className="grid grid-cols-2 gap-6"> {/* Alterado para grid-cols-2 */}
     {Array.from({ length: count }).map((_, i) => (
       <div key={i} className="space-y-2">
         <Skeleton className="h-48 w-full" />
@@ -87,10 +100,15 @@ const Index = () => {
   const { user } = useSession();
   const queryClient = useQueryClient();
 
-  const { data: homeData, isLoading, isError, error } = useQuery({
+  const { data: homeData, isLoading, isError, error } = useQuery<HomePageData>({
     queryKey: ['homePageData'],
     queryFn: fetchHomePageData,
     staleTime: 5 * 60 * 1000, // 5 minutos
+  });
+
+  const { data: categories, isLoading: isLoadingCategories } = useQuery<Category[]>({
+    queryKey: ["categories"],
+    queryFn: fetchCategories,
   });
 
   const { data: favoriteIds } = useQuery({
@@ -99,11 +117,10 @@ const Index = () => {
     enabled: !!user,
   });
 
-  // Nova query para buscar dados do perfil e anúncios do usuário para o onboarding
   const { data: userOnboardingData, isLoading: isLoadingUserOnboardingData } = useQuery({
     queryKey: ["userOnboardingData", user?.id],
     queryFn: () => fetchProfileAndAdsForOnboarding(user?.id),
-    enabled: !!user, // Apenas executa se o usuário estiver logado
+    enabled: !!user,
   });
 
   usePageMetadata({
@@ -118,35 +135,39 @@ const Index = () => {
     return <ErrorState message={error.message} onRetry={() => queryClient.invalidateQueries({ queryKey: ['homePageData'] })} />
   }
 
-  const sectionTitle = "Destaques Recentes";
-
   return (
     <div className="space-y-8">
-      {user && ( // Renderiza o OnboardingCard apenas se o usuário estiver logado
+      {/* REMOVIDO: <SearchBar /> */}
+      {user && (
         <OnboardingCard
           profile={userOnboardingData?.profile}
           ads={userOnboardingData?.ads}
           isLoading={isLoadingUserOnboardingData}
         />
       )}
-      <AdStories stories={homeData?.stories} isLoading={isLoading} />
       <PromoBanner banners={homeData?.banners} isLoading={isLoading} />
+      
+      {/* Agora usa CategoryGrid para todas as visualizações */}
+      <CategoryGrid categories={categories} isLoading={isLoadingCategories} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        <section className="lg:col-span-2">
-          <h2 className="text-2xl font-bold mb-6">{sectionTitle}</h2>
-          
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">Anúncios populares</h2>
+        <Link to="/anuncios" className="text-primary hover:underline">
+          Veja tudo
+        </Link>
+      </div>
+      
+      <section>
           {isLoading ? (
             <AdGridSkeleton />
           ) : (
             <AdGrid ads={homeData?.ads || []} favoriteIds={favoriteIds || []} />
           )}
-        </section>
+      </section>
 
-        <aside className="lg:col-span-1 lg:sticky lg:top-24 space-y-8">
+      <aside className="lg:col-span-1 lg:sticky lg:top-24 space-y-8">
           <ActivityFeed activities={homeData?.activity_feed} isLoading={isLoading} />
-        </aside>
-      </div>
+      </aside>
     </div>
   );
 };

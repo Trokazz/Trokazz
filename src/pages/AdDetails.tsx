@@ -15,7 +15,8 @@ import MakeOfferDialog from "@/components/MakeOfferDialog";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
 import ShareButtons from "@/components/ShareButtons";
 import ErrorState from "@/components/ErrorState";
-import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
+import usePageMetadata from "@/hooks/usePageMetadata";
+// REMOVIDO: import AdSenseAd from "@/components/AdSenseAd";
 
 const fetchAdDetails = async (id: string) => {
   const { data, error } = await supabase
@@ -53,14 +54,13 @@ const AdDetails = () => {
     enabled: !!id,
   });
 
-  // Adicionando o hook usePageMetadata
   usePageMetadata({
     title: ad ? `${ad.title} - Trokazz` : "Detalhes do Anúncio - Trokazz",
     description: ad ? ad.description || `Confira este anúncio no Trokazz: ${ad.title}` : "Detalhes de um anúncio no Trokazz.",
     keywords: ad ? `${ad.title}, ${ad.category_slug}, ${ad.price}, dourados, ms, trokazz` : "anúncio, classificados, dourados, ms",
     ogTitle: ad ? ad.title : "Detalhes do Anúncio",
     ogDescription: ad ? ad.description || `Confira este anúncio no Trokazz: ${ad.title}` : "Detalhes de um anúncio no Trokazz.",
-    ogImage: ad?.image_urls?.[0] ? getOptimizedImageUrl(ad.image_urls[0], { width: 1200, height: 630 }) : `${window.location.origin}/logo.png`,
+    ogImage: ad?.image_urls?.[0] ? getOptimizedImageUrl(ad.image_urls[0], { width: 1200, height: 630 }, 'advertisements') : `${window.location.origin}/logo.png`,
     ogUrl: adUrl,
   });
 
@@ -123,7 +123,7 @@ const AdDetails = () => {
                   {ad.image_urls.map((url, index) => (
                     <CarouselItem key={index}>
                       <div className="aspect-square w-full">
-                        <img src={getOptimizedImageUrl(url, { width: 800, height: 800 })} alt={`${ad.title} - Imagem ${index + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                        <img src={getOptimizedImageUrl(url, { width: 800, height: 800 }, 'advertisements')} alt={`${ad.title} - Imagem ${index + 1}`} className="w-full h-full object-cover" loading="lazy" />
                       </div>
                     </CarouselItem>
                   ))}
@@ -180,6 +180,9 @@ const AdDetails = () => {
               </div>
 
               <ShareButtons title={ad.title} url={adUrl} />
+
+              {/* REMOVIDO: AdSense Ad Unit for Ad Details Page */}
+
             </CardContent>
             <div className="mt-6 border-t pt-4 space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">

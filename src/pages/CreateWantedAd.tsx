@@ -26,6 +26,7 @@ import { useNavigate } from "react-router-dom";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react"; // Importar Loader2
 
 const wantedAdSchema = z.object({
   title: z.string().min(5, "O título deve ter pelo menos 5 caracteres."),
@@ -150,7 +151,13 @@ const CreateWantedAd = () => {
               )}
             />
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Publicando..." : "Publicar Anúncio de Procura"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Publicando...
+                </>
+              ) : (
+                "Publicar Anúncio de Procura"
+              )}
             </Button>
           </form>
         </Form>

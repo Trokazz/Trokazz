@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { Label } from "@/components/ui/label";
+import DOMPurify from 'dompurify'; // Import DOMPurify
+import { Loader2 } from "lucide-react"; // Importar Loader2
 
 const pageSchema = z.object({
   content: z.string().min(1, "O conteúdo não pode estar vazio."),
@@ -26,6 +28,7 @@ const fetchPageContent = async (slug: string) => {
 const ManagePages = () => {
   const [selectedPage, setSelectedPage] = useState("privacy-policy");
   const queryClient = useQueryClient();
+  const [isSubmitting, setIsSubmitting] = useState(false); // Novo estado de carregamento
   const form = useForm<z.infer<typeof pageSchema>>({
     resolver: zodResolver(pageSchema),
   });
@@ -43,11 +46,15 @@ const ManagePages = () => {
   }, [data, form]);
 
   const onSubmit = async (values: z.infer<typeof pageSchema>) => {
+    setIsSubmitting(true); // Ativa o estado de carregamento
     const toastId = showLoading("Salvando conteúdo...");
     try {
+      // Sanitize the content before sending to Supabase
+      const sanitizedContent = DOMPurify.sanitize(values.content, { USE_PROFILES: { html: true } });
+
       const { error } = await supabase
         .from("pages")
-        .update({ content: values.content })
+        .update({ content: sanitizedContent })
         .eq("slug", selectedPage);
       if (error) throw error;
       dismissToast(toastId);
@@ -56,6 +63,8 @@ const ManagePages = () => {
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
+    } finally {
+      setIsSubmitting(false); // Desativa o estado de carregamento
     }
   };
 
@@ -100,8 +109,14 @@ const ManagePages = () => {
                   </FormItem>
                 )}
               />
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? "Salvando..." : "Salvar Conteúdo"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                  </>
+                ) : (
+                  "Salvar Conteúdo"
+                )}
               </Button>
             </form>
           </Form>

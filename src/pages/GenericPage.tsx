@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { safeFormatDate } from "@/lib/utils";
-import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
+import usePageMetadata from "@/hooks/usePageMetadata";
+import DOMPurify from 'dompurify'; // Import DOMPurify
 
 interface GenericPageProps {
   slug: string;
@@ -25,13 +26,15 @@ const GenericPage = ({ slug }: GenericPageProps) => {
   const pageDescription = data?.title ? `Leia a ${data.title} do Trokazz.` : `Informações importantes sobre ${slug.replace(/-/g, ' ')} do Trokazz.`;
   const pageKeywords = `${slug.replace(/-/g, ' ')}, trokazz, dourados, ms`;
 
-  // Adicionando o hook usePageMetadata
   usePageMetadata({
     title: `${pageTitle} - Trokazz`,
     description: pageDescription,
     keywords: pageKeywords,
     ogUrl: window.location.href,
   });
+
+  // Sanitize the content before passing it to dangerouslySetInnerHTML
+  const sanitizedContent = data?.content ? DOMPurify.sanitize(data.content, { USE_PROFILES: { html: true } }) : "";
 
   return (
     <Card className="max-w-4xl mx-auto">
@@ -55,7 +58,7 @@ const GenericPage = ({ slug }: GenericPageProps) => {
         ) : (
           <div
             className="prose dark:prose-invert max-w-none text-muted-foreground"
-            dangerouslySetInnerHTML={{ __html: data?.content || "" }}
+            dangerouslySetInnerHTML={{ __html: sanitizedContent }}
           />
         )}
       </CardContent>

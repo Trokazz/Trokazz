@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Star, BadgeCheck } from "lucide-react";
-import AdCard, { Advertisement } from "@/components/AdCard";
+import AdCard from "@/components/AdCard";
 import { useSession } from "@/contexts/SessionContext";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,30 +19,45 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ReputationBadge, { ReputationBadgeType } from "@/components/ReputationBadge";
 import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
-import { ReviewWithReviewer } from "@/types/database";
-import usePageMetadata from "@/hooks/usePageMetadata"; // Importando o hook
+import { Advertisement, ReviewWithReviewer, UserLevelDetails, Profile as ProfileType } from "@/types/database"; // Corrected import for Advertisement
+import usePageMetadata from "@/hooks/usePageMetadata";
+import * as Icons from "lucide-react";
 
 const reviewSchema = z.object({
-  rating: z.number().min(1, "A avaliação é obrigatória.").max(5),
+  rating: z.number().min(1, "A avaliação geral é obrigatória.").max(5),
   comment: z.string().min(10, "O comentário deve ter pelo menos 10 caracteres.").max(500, "O comentário não pode exceder 500 caracteres."),
+  communication_rating: z.number().min(1, "A avaliação de comunicação é obrigatória.").max(5),
+  punctuality_rating: z.number().min(1, "A avaliação de pontualidade é obrigatória.").max(5),
+  item_quality_rating: z.number().min(1, "A avaliação de qualidade do item é obrigatória.").max(5),
 });
 
 const fetchProfileByUsername = async (username: string) => {
-  const { data, error } = await supabase
+  console.log(`PublicProfilePage: Fetching profile for username: ${username}`);
+  const { data: profileData, error: profileError } = await supabase
     .from("profiles")
-    .select(`
-      *,
-      user_badges (
-        badges ( id, name, description, icon )
-      )
-    `) // Revertendo para selecionar todos os campos
+    .select(`*, user_badges ( badges ( id, name, description, icon ) )`)
     .eq("username", username)
     .single();
-  if (error || !data) throw new Error("Perfil não encontrado.");
+  if (profileError || !profileData) {
+    console.error("PublicProfilePage: Error fetching profile:", profileError);
+    throw new Error("Perfil não encontrado.");
+  }
+  console.log("PublicProfilePage: Profile data fetched:", profileData);
   
+  let userLevelDetails: UserLevelDetails | null = null;
+  if (profileData.user_level) {
+    const { data: levelData, error: levelError } = await supabase
+      .from("user_levels")
+      .select("*")
+      .eq("level_name", profileData.user_level)
+      .single();
+    if (levelError) console.error("Error fetching user level details:", levelError);
+    userLevelDetails = levelData;
+  }
+
   let badges: ReputationBadgeType[] = [];
-  if (Array.isArray(data.user_badges)) {
-    badges = data.user_badges
+  if (Array.isArray(profileData.user_badges)) {
+    badges = profileData.user_badges
       .map((userBadge: any) => userBadge?.badges)
       .filter((badge: any): badge is ReputationBadgeType => 
         badge && typeof badge === 'object' && 
@@ -53,10 +68,10 @@ const fetchProfileByUsername = async (username: string) => {
       );
   }
 
-  const profileData = { ...data, badges };
-  delete (profileData as any).user_badges;
+  const profileWithDetails = { ...profileData, badges, userLevelDetails };
+  delete (profileWithDetails as any).user_badges;
 
-  return profileData;
+  return profileWithDetails;
 };
 
 const fetchAdsByUserId = async (userId: string) => {
@@ -103,6 +118,10 @@ const PublicProfilePage = () => {
   const { user } = useSession();
   const queryClient = useQueryClient();
   const [hoverRating, setHoverRating] = useState(0);
+  const [hoverCommRating, setHoverCommRating] = useState(0);
+  const [hoverPunctRating, setHoverPunctRating] = useState(0);
+  const [hoverItemRating, setHoverItemRating] = useState(0);
+
 
   const { data: profile, isLoading: isLoadingProfile, isError: isProfileError, error: profileError } = useQuery({
     queryKey: ["publicProfile", username],
@@ -122,18 +141,23 @@ const PublicProfilePage = () => {
       enabled: !!profile,
   });
 
-  // Adicionando o hook usePageMetadata
   usePageMetadata({
     title: profile ? `${profile.full_name} (@${profile.username}) - Trokazz` : "Perfil de Usuário - Trokazz",
     description: profile ? `Veja os anúncios e avaliações de ${profile.full_name} no Trokazz. ${profile.service_tags?.join(', ') || ''}` : "Perfil de usuário no Trokazz.",
     keywords: profile ? `${profile.full_name}, ${profile.username}, ${profile.service_tags?.join(', ')}, vendedor, trokazz, dourados` : "perfil, usuário, vendedor, trokazz",
-    ogImage: profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }) : `${window.location.origin}/logo.png`,
+    ogImage: profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }, 'avatars') : `${window.location.origin}/logo.png`,
     ogUrl: window.location.href,
   });
 
   const reviewForm = useForm<z.infer<typeof reviewSchema>>({
     resolver: zodResolver(reviewSchema),
-    defaultValues: { rating: 0, comment: "" },
+    defaultValues: { 
+      rating: 0, 
+      comment: "",
+      communication_rating: 0,
+      punctuality_rating: 0,
+      item_quality_rating: 0,
+    },
   });
 
   const onReviewSubmit = async (values: z.infer<typeof reviewSchema>) => {
@@ -148,6 +172,9 @@ const PublicProfilePage = () => {
         reviewer_id: user.id,
         rating: values.rating,
         comment: values.comment,
+        communication_rating: values.communication_rating,
+        punctuality_rating: values.punctuality_rating,
+        item_quality_rating: values.item_quality_rating,
       });
 
       if (error) {
@@ -157,8 +184,15 @@ const PublicProfilePage = () => {
 
       dismissToast(toastId);
       showSuccess("Avaliação enviada com sucesso!");
-      reviewForm.reset({ rating: 0, comment: "" });
+      reviewForm.reset({ 
+        rating: 0, 
+        comment: "", 
+        communication_rating: 0, 
+        punctuality_rating: 0, 
+        item_quality_rating: 0 
+      });
       queryClient.invalidateQueries({ queryKey: ["profileReviews", profile.id] });
+      queryClient.invalidateQueries({ queryKey: ["publicProfile", username] }); // Invalidate profile to update reputation/level
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
@@ -185,15 +219,41 @@ const PublicProfilePage = () => {
   if (isProfileError) return <div className="text-center py-10 text-red-500">Erro: {profileError.message}</div>;
   if (!profile) return <div className="text-center py-10">Perfil não encontrado.</div>;
 
+  console.log(`PublicProfilePage: Rendering profile for ${profile.username}. is_verified: ${profile.is_verified}`);
+  const LevelIcon = profile.userLevelDetails?.badge_icon ? (Icons as any)[profile.userLevelDetails.badge_icon] || Icons.HelpCircle : Icons.User;
+
   return (
     <div className="space-y-8">
       <Card>
         <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-6">
-          <Avatar className="h-24 w-24"><AvatarImage src={getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }) || undefined} loading="lazy" /><AvatarFallback>{profile.full_name?.[0] || 'V'}</AvatarFallback></Avatar>
+          <Avatar className="h-24 w-24"><AvatarImage src={getOptimizedImageUrl(profile.avatar_url, { width: 200, height: 200 }, 'avatars') || undefined} loading="lazy" /><AvatarFallback>{profile.full_name?.[0] || 'V'}</AvatarFallback></Avatar>
           <div className="text-center sm:text-left flex-1">
             <div className="flex items-center gap-2 justify-center sm:justify-start">
               <h1 className="text-2xl font-bold">{profile.full_name}</h1>
-              {profile.is_verified && <Tooltip><TooltipTrigger><BadgeCheck className="h-6 w-6 fill-teal-500 text-white" /></TooltipTrigger><TooltipContent><p>Vendedor Verificado</p></TooltipContent></Tooltip>}
+              {profile.is_verified && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <BadgeCheck className="h-6 w-6 fill-teal-500 text-white" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Vendedor Verificado</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {profile.user_level && profile.userLevelDetails && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 py-1 px-2 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
+                      <LevelIcon className="h-4 w-4" />
+                      <span className="font-semibold text-sm">{profile.userLevelDetails.level_name}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{profile.userLevelDetails.description}</p>
+                    {profile.reputation_score !== null && <p>Pontuação de Reputação: {profile.reputation_score.toFixed(0)}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             <div className="flex items-center gap-2 text-muted-foreground justify-center sm:justify-start">
               <div className="flex items-center"><Star className={`h-5 w-5 ${averageRating > 0 ? 'text-yellow-400 fill-yellow-400' : ''}`} /><span className="ml-1 font-semibold">{averageRating.toFixed(1)}</span></div>
@@ -219,7 +279,7 @@ const PublicProfilePage = () => {
                     <div key={review.id} className="border-b pb-4">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
-                          <AvatarImage src={getOptimizedImageUrl(review.reviewer?.avatar_url, { width: 100, height: 100 })} loading="lazy" />
+                          <AvatarImage src={getOptimizedImageUrl(review.reviewer?.avatar_url, { width: 100, height: 100 }, 'avatars')} loading="lazy" />
                           <AvatarFallback>{review.reviewer?.full_name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
                         <div>
@@ -232,6 +292,34 @@ const PublicProfilePage = () => {
                         </div>
                       </div>
                       <p className="text-muted-foreground mt-2 pl-12">{review.comment}</p>
+                      {(review.communication_rating || review.punctuality_rating || review.item_quality_rating) && (
+                        <div className="pl-12 mt-2 text-sm text-muted-foreground space-y-1">
+                          {review.communication_rating && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">Comunicação:</span>
+                              <div className="flex">
+                                {[...Array(5)].map((_, i) => (<Star key={i} className={`h-4 w-4 ${i < review.communication_rating! ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />))}
+                              </div>
+                            </div>
+                          )}
+                          {review.punctuality_rating && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">Pontualidade:</span>
+                              <div className="flex">
+                                {[...Array(5)].map((_, i) => (<Star key={i} className={`h-4 w-4 ${i < review.punctuality_rating! ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />))}
+                              </div>
+                            </div>
+                          )}
+                          {review.item_quality_rating && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">Qualidade do Item:</span>
+                              <div className="flex">
+                                {[...Array(5)].map((_, i) => (<Star key={i} className={`h-4 w-4 ${i < review.item_quality_rating! ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))
                 ) : (
@@ -253,7 +341,7 @@ const PublicProfilePage = () => {
                             name="rating"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Sua nota</FormLabel>
+                                <FormLabel>Avaliação Geral</FormLabel>
                                 <FormControl>
                                   <div className="flex" onMouseLeave={() => setHoverRating(0)}>
                                     {[...Array(5)].map((_, i) => {
@@ -264,6 +352,81 @@ const PublicProfilePage = () => {
                                           className={`h-8 w-8 cursor-pointer transition-colors ${ratingValue <= (hoverRating || field.value) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
                                           onClick={() => field.onChange(ratingValue)}
                                           onMouseEnter={() => setHoverRating(ratingValue)}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={reviewForm.control}
+                            name="communication_rating"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Comunicação</FormLabel>
+                                <FormControl>
+                                  <div className="flex" onMouseLeave={() => setHoverCommRating(0)}>
+                                    {[...Array(5)].map((_, i) => {
+                                      const ratingValue = i + 1;
+                                      return (
+                                        <Star
+                                          key={ratingValue}
+                                          className={`h-8 w-8 cursor-pointer transition-colors ${ratingValue <= (hoverCommRating || field.value) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
+                                          onClick={() => field.onChange(ratingValue)}
+                                          onMouseEnter={() => setHoverCommRating(ratingValue)}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={reviewForm.control}
+                            name="punctuality_rating"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Pontualidade</FormLabel>
+                                <FormControl>
+                                  <div className="flex" onMouseLeave={() => setHoverPunctRating(0)}>
+                                    {[...Array(5)].map((_, i) => {
+                                      const ratingValue = i + 1;
+                                      return (
+                                        <Star
+                                          key={ratingValue}
+                                          className={`h-8 w-8 cursor-pointer transition-colors ${ratingValue <= (hoverPunctRating || field.value) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
+                                          onClick={() => field.onChange(ratingValue)}
+                                          onMouseEnter={() => setHoverPunctRating(ratingValue)}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={reviewForm.control}
+                            name="item_quality_rating"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Qualidade do Item</FormLabel>
+                                <FormControl>
+                                  <div className="flex" onMouseLeave={() => setHoverItemRating(0)}>
+                                    {[...Array(5)].map((_, i) => {
+                                      const ratingValue = i + 1;
+                                      return (
+                                        <Star
+                                          key={ratingValue}
+                                          className={`h-8 w-8 cursor-pointer transition-colors ${ratingValue <= (hoverItemRating || field.value) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
+                                          onClick={() => field.onChange(ratingValue)}
+                                          onMouseEnter={() => setHoverItemRating(ratingValue)}
                                         />
                                       );
                                     })}

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Edit, PlusCircle } from "lucide-react";
+import { Trash2, Edit, PlusCircle, Loader2 } from "lucide-react"; // Importar Loader2
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
-import { safeFormatDate } from "@/lib/utils";
+import { safeFormatDate, getRelativePathFromUrlOrPath } from "@/lib/utils"; // Importar a nova função
 import { Badge } from "@/components/ui/badge";
 import {
   Form,
@@ -30,6 +30,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Database } from "@/types/supabase";
 
 const bannerSchema = z.object({
   title: z.string().min(1, "O título é obrigatório."),
@@ -44,7 +45,9 @@ const bannerSchema = z.object({
   text_color: z.string().optional(),
 });
 
-type Banner = { id: string; title: string; is_active: boolean; starts_at: string | null; ends_at: string | null; image_url: string; description: string | null; link_url: string | null; button_text: string | null; background_color: string | null; text_color: string | null; };
+type Banner = Database['public']['Tables']['banners']['Row'];
+type BannerInsert = Database['public']['Tables']['banners']['Insert'];
+type BannerUpdate = Database['public']['Tables']['banners']['Update'];
 
 const fetchBanners = async () => {
   const { data, error } = await supabase.from("banners").select("*").order("created_at", { ascending: false });
@@ -70,6 +73,7 @@ const ManageBanners = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Novo estado de carregamento
 
   const { data: banners, isLoading } = useQuery({
     queryKey: ["allBanners"],
@@ -97,28 +101,46 @@ const ManageBanners = () => {
   };
 
   const onSubmit = async (values: z.infer<typeof bannerSchema>) => {
+    setIsSubmitting(true); // Ativa o estado de carregamento
     const toastId = showLoading(editingBanner ? "Atualizando banner..." : "Criando banner...");
     try {
-      let imageUrl = editingBanner?.image_url;
+      let imagePath = editingBanner?.image_url ? getRelativePathFromUrlOrPath(editingBanner.image_url, 'banners') : null; // Pega o caminho relativo se já existir
       const imageFile = values.image?.[0];
 
       if (imageFile) {
         const fileName = `${Date.now()}-${imageFile.name}`;
         const { error: uploadError } = await supabase.storage.from("banners").upload(fileName, imageFile, { upsert: true });
         if (uploadError) throw new Error(uploadError.message);
-        imageUrl = supabase.storage.from("banners").getPublicUrl(fileName).data.publicUrl;
+        imagePath = fileName; // Armazena o caminho relativo
       }
 
-      if (!imageUrl && !editingBanner) {
+      if (!imagePath && !editingBanner) { // Verifica se há imagem para novos banners
         throw new Error("A imagem é obrigatória para criar um novo banner.");
       }
 
-      const payload = { ...values, image_url: imageUrl, starts_at: values.starts_at || null, ends_at: values.ends_at || null };
-      delete (payload as any).image;
+      const { image, ...restOfValues } = values;
+      
+      // Base payload para ambos insert e update
+      const basePayload = {
+        ...restOfValues,
+        image_url: imagePath,
+        starts_at: values.starts_at || null,
+        ends_at: values.ends_at || null,
+      };
 
-      const { error } = editingBanner
-        ? await supabase.from("banners").update(payload).eq("id", editingBanner.id)
-        : await supabase.from("banners").insert(payload);
+      let error;
+      if (editingBanner) {
+        const payload: BannerUpdate = basePayload; // Cast para o tipo de update
+        ({ error } = await supabase.from("banners").update(payload).eq("id", editingBanner.id));
+      } else {
+        // Para inserção, garantimos que 'title' e 'image_url' são strings não-nulas
+        const payload: BannerInsert = {
+          ...basePayload,
+          title: values.title, // 'title' é obrigatório no schema e no tipo Insert
+          image_url: imagePath!, // 'image_url' é obrigatório no tipo Insert
+        };
+        ({ error } = await supabase.from("banners").insert(payload));
+      }
 
       if (error) throw new Error(error.message);
 
@@ -130,18 +152,24 @@ const ManageBanners = () => {
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (banner: Banner) => {
     const toastId = showLoading("Excluindo banner...");
     try {
+      // Converte a URL pública existente para caminho relativo antes de remover
+      const imagePath = getRelativePathFromUrlOrPath(banner.image_url, 'banners');
+      if (imagePath) {
+        const { error: deleteStorageError } = await supabase.storage.from("banners").remove([imagePath]);
+        if (deleteStorageError) console.error("Erro ao deletar imagem do storage:", deleteStorageError);
+      }
+
       const { error } = await supabase.from("banners").delete().eq("id", banner.id);
       if (error) throw new Error(error.message);
       
-      const imagePath = banner.image_url.split('/banners/')[1];
-      if (imagePath) await supabase.storage.from("banners").remove([imagePath]);
-
       dismissToast(toastId);
       showSuccess("Banner excluído com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["allBanners"] });
@@ -200,7 +228,18 @@ const ManageBanners = () => {
                 <FormField control={form.control} name="ends_at" render={({ field }) => (<FormItem><FormLabel>Fim da Exibição</FormLabel><FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
               </div>
               <FormField control={form.control} name="is_active" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-4"><div className="space-y-0.5"><FormLabel className="text-base">Ativo</FormLabel><FormDescription>Controla se o banner está visível.</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
-              <DialogFooter><Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button><Button type="submit">Salvar</Button></DialogFooter>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    "Salvar"
+                  )}
+                </Button>
+              </DialogFooter>
             </form>
           </Form>
         </DialogContent>

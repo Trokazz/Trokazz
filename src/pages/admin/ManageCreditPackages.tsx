@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Edit, PlusCircle } from "lucide-react";
+import { Trash2, Edit, PlusCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
+import { Database } from "@/types/supabase"; // Importar o tipo Database
 
 const packageSchema = z.object({
   amount: z.coerce.number().int().positive("A quantidade deve ser um número inteiro positivo."),
@@ -29,10 +30,12 @@ const packageSchema = z.object({
   is_active: z.boolean().default(true),
 });
 
-type CreditPackage = { id: string; amount: number; price_in_cents: number; description: string | null; is_active: boolean };
+type CreditPackage = Database['public']['Tables']['credit_packages']['Row'];
+type CreditPackageInsert = Database['public']['Tables']['credit_packages']['Insert'];
+type CreditPackageUpdate = Database['public']['Tables']['credit_packages']['Update'];
 
 const fetchPackages = async () => {
-  const { data, error } = await supabase.from("credit_packages").select("*").order("price_in_cents");
+  const { data, error } = await supabase.from("credit_packages").select("id, amount, price_in_cents, description, is_active").order("price_in_cents"); // Otimizado aqui
   if (error) throw new Error(error.message);
   return data;
 };
@@ -41,6 +44,7 @@ const ManageCreditPackages = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: packages, isLoading } = useQuery({
     queryKey: ["allCreditPackages"],
@@ -63,11 +67,29 @@ const ManageCreditPackages = () => {
   };
 
   const onSubmit = async (values: z.infer<typeof packageSchema>) => {
+    setIsSubmitting(true);
     const toastId = showLoading(editingPackage ? "Atualizando pacote..." : "Criando pacote...");
     try {
-      const { error } = editingPackage
-        ? await supabase.from("credit_packages").update(values).eq("id", editingPackage.id)
-        : await supabase.from("credit_packages").insert(values);
+      let error;
+      if (editingPackage) {
+        // Para atualização, os campos são opcionais no tipo Supabase
+        const payload: CreditPackageUpdate = {
+          amount: values.amount,
+          price_in_cents: values.price_in_cents,
+          description: values.description,
+          is_active: values.is_active,
+        };
+        ({ error } = await supabase.from("credit_packages").update(payload).eq("id", editingPackage.id));
+      } else {
+        // Para inserção, os campos são obrigatórios no tipo Supabase
+        const payload: CreditPackageInsert = {
+          amount: values.amount,
+          price_in_cents: values.price_in_cents,
+          description: values.description,
+          is_active: values.is_active,
+        };
+        ({ error } = await supabase.from("credit_packages").insert(payload));
+      }
       if (error) throw new Error(error.message);
 
       dismissToast(toastId);
@@ -78,6 +100,8 @@ const ManageCreditPackages = () => {
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -172,7 +196,15 @@ const ManageCreditPackages = () => {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-              <Button type="submit">Salvar</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                  </>
+                ) : (
+                  "Salvar"
+                )}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

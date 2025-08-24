@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
 import { useState } from "react";
 import usePageMetadata from "@/hooks/usePageMetadata";
+import { Loader2 } from "lucide-react"; // Importar Loader2
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Por favor, insira um e-mail válido."),
@@ -92,7 +93,13 @@ const ForgotPassword = () => {
                   )}
                 />
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Enviando..." : "Enviar Link de Recuperação"}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...
+                    </>
+                  ) : (
+                    "Enviar Link de Recuperação"
+                  )}
                 </Button>
               </form>
             </Form>

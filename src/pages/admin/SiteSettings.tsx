@@ -19,13 +19,18 @@ import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 const settingsSchema = z.object({
   maintenance_mode: z.boolean().default(false),
   welcome_message: z.string().optional(),
   boost_price: z.coerce.number().min(0, "O preço deve ser positivo.").default(25),
   boost_duration_days: z.coerce.number().int().min(1, "A duração deve ser de pelo menos 1 dia.").default(7),
+  // REMOVIDO: Novos campos para AdSense
+  // adsense_client_id: z.string().optional().nullable(),
+  // adsense_ad_unit_homepage: z.string().optional().nullable(),
+  // adsense_ad_unit_ad_details: z.string().optional().nullable(),
 });
 
 type SettingsData = z.infer<typeof settingsSchema>;
@@ -44,11 +49,16 @@ const fetchSettings = async (): Promise<SettingsData> => {
     welcome_message: settings.welcome_message || "",
     boost_price: settings.boost_price ? parseFloat(settings.boost_price) : 25,
     boost_duration_days: settings.boost_duration_days ? parseInt(settings.boost_duration_days, 10) : 7,
+    // REMOVIDO: Mapear novos campos do AdSense
+    // adsense_client_id: settings.adsense_client_id || null,
+    // adsense_ad_unit_homepage: settings.adsense_ad_unit_homepage || null,
+    // adsense_ad_unit_ad_details: settings.adsense_ad_unit_ad_details || null,
   };
 };
 
 const SiteSettings = () => {
   const queryClient = useQueryClient();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { data: settings, isLoading } = useQuery({
     queryKey: ["siteSettings"],
     queryFn: fetchSettings,
@@ -61,6 +71,9 @@ const SiteSettings = () => {
       welcome_message: "",
       boost_price: 25,
       boost_duration_days: 7,
+      // REMOVIDO: adsense_client_id: null,
+      // REMOVIDO: adsense_ad_unit_homepage: null,
+      // REMOVIDO: adsense_ad_unit_ad_details: null,
     },
   });
 
@@ -71,6 +84,7 @@ const SiteSettings = () => {
   }, [settings, form]);
 
   const onSubmit = async (values: SettingsData) => {
+    setIsSubmitting(true);
     const toastId = showLoading("Salvando configurações...");
     try {
       const settingsToSave = Object.entries(values).map(([key, value]) => ({
@@ -87,6 +101,8 @@ const SiteSettings = () => {
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -172,8 +188,65 @@ const SiteSettings = () => {
                 )}
               />
             </div>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? "Salvando..." : "Salvar Configurações"}
+
+            {/* REMOVIDO: Google AdSense Settings Section */}
+            {/*
+            <h3 className="text-lg font-medium mt-8">Configurações do Google AdSense</h3>
+            <p className="text-sm text-muted-foreground">
+              Insira os IDs do AdSense para exibir anúncios no seu site.
+            </p>
+            <FormField
+              control={form.control}
+              name="adsense_client_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>AdSense Client ID (data-ad-client)</FormLabel>
+                  <FormControl><Input placeholder="Ex: ca-pub-XXXXXXXXXXXXXXXX" {...field} value={field.value || ''} /></FormControl>
+                  <FormDescription>
+                    Seu ID de cliente do Google AdSense.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="adsense_ad_unit_homepage"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>AdSense Slot ID (Página Inicial)</FormLabel>
+                  <FormControl><Input placeholder="Ex: 1234567890" {...field} value={field.value || ''} /></FormControl>
+                  <FormDescription>
+                    ID do bloco de anúncios para a página inicial.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="adsense_ad_unit_ad_details"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>AdSense Slot ID (Página de Detalhes do Anúncio)</FormLabel>
+                  <FormControl><Input placeholder="Ex: 0987654321" {...field} value={field.value || ''} /></FormControl>
+                  <FormDescription>
+                    ID do bloco de anúncios para a página de detalhes de cada anúncio.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            */}
+
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                </>
+              ) : (
+                "Salvar Configurações"
+              )}
             </Button>
           </form>
         </Form>

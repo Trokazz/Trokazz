@@ -6,32 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
+import { ConversationWithDetails as FullConversationDetails } from "@/types/database"; // Importa o tipo completo
+import { Database } from "@/types/supabase"; // Importa o tipo Database
 
-// Definindo um tipo mais abrangente para a conversa
-type ConversationWithDetails = {
-  id: string;
-  last_message_at: string;
-  conversation_type: 'ad_chat' | 'wanted_ad_chat'; // Adicionado o tipo de conversa
-  advertisements: {
-    id: string; // Adicionado o ID
-    title: string | null;
-    image_urls: string[] | null;
-  } | null;
-  wanted_ads: { // Adicionado para anúncios de procura
-    id: string; // Adicionado o ID
-    title: string | null;
-  } | null;
-  buyer: { id: string; full_name: string | null; avatar_url: string | null; } | null;
-  seller: { id: string; full_name: string | null; avatar_url: string | null; } | null;
-  messages: {
-    content: string;
-    created_at: string;
-    is_read: boolean;
-    sender_id: string;
-  }[];
+// Definindo um tipo preciso para o resultado da query de mensagens
+type MessageQueryResult = Pick<Database['public']['Tables']['messages']['Row'], 'content' | 'created_at' | 'is_read' | 'sender_id'>;
+
+// Definindo um tipo preciso para o resultado da query de conversas
+type ConversationQueryResult = Pick<Database['public']['Tables']['conversations']['Row'], 'id' | 'last_message_at' | 'conversation_type'> & {
+  advertisements: Pick<Database['public']['Tables']['advertisements']['Row'], 'id' | 'title' | 'image_urls'> | null;
+  wanted_ads: Pick<Database['public']['Tables']['wanted_ads']['Row'], 'id' | 'title'> | null;
+  buyer: Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'full_name' | 'avatar_url'> | null;
+  seller: Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'full_name' | 'avatar_url'> | null;
+  messages: MessageQueryResult[];
 };
 
-const fetchConversations = async (userId: string): Promise<ConversationWithDetails[]> => {
+const fetchConversations = async (userId: string) => {
   const { data, error } = await supabase
     .from("conversations")
     .select(`
@@ -50,12 +40,12 @@ const fetchConversations = async (userId: string): Promise<ConversationWithDetai
     .limit(1, { foreignTable: "messages" });
 
   if (error) throw error;
-  return data as unknown as ConversationWithDetails[];
+  return data as ConversationQueryResult[];
 };
 
 const Inbox = () => {
   const { user } = useSession();
-  const { data: conversations, isLoading } = useQuery<ConversationWithDetails[]>({
+  const { data: conversations, isLoading } = useQuery<ConversationQueryResult[]>({
     queryKey: ["conversations", user?.id],
     queryFn: () => fetchConversations(user!.id),
     enabled: !!user,
@@ -96,9 +86,10 @@ const Inbox = () => {
               ? convo.advertisements?.title 
               : convo.wanted_ads?.title;
             
-            const adImage = convo.conversation_type === 'ad_chat' 
-              ? convo.advertisements?.image_urls?.[0] 
-              : null; // Anúncios de procura não têm imagem de capa no momento
+            // Obtém a URL pública da imagem do anúncio usando o caminho relativo
+            const adImage = convo.conversation_type === 'ad_chat' && convo.advertisements?.image_urls?.[0]
+              ? getOptimizedImageUrl(convo.advertisements.image_urls[0], { width: 64, height: 64 }, 'advertisements')
+              : null;
 
             const adLink = convo.conversation_type === 'ad_chat' 
               ? `/anuncio/${convo.advertisements?.id}` 
@@ -111,7 +102,7 @@ const Inbox = () => {
                 className={`flex items-center gap-4 p-3 rounded-lg transition-colors hover:bg-muted ${isUnread ? 'bg-primary/10' : ''}`}
               >
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 100, height: 100 })} loading="lazy" />
+                  <AvatarImage src={getOptimizedImageUrl(otherUser.avatar_url, { width: 100, height: 100 }, 'avatars')} loading="lazy" />
                   <AvatarFallback>{getInitials(otherUser.full_name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 overflow-hidden">
@@ -133,7 +124,7 @@ const Inbox = () => {
                 </div>
                 {adImage && (
                   <img 
-                    src={getOptimizedImageUrl(adImage, { width: 64, height: 64 })} 
+                    src={adImage} 
                     alt="Anúncio" 
                     className="w-16 h-16 object-cover rounded-md flex-shrink-0" 
                     loading="lazy"

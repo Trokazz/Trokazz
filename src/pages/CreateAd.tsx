@@ -29,6 +29,7 @@ import { useQuery } from "@tanstack/react-query";
 import MultiImageUploader from "@/components/MultiImageUploader";
 import { Skeleton } from "@/components/ui/skeleton"; // Importar Skeleton
 import { useNavigate } from "react-router-dom"; // Adicionado: Importação do useNavigate
+import { Loader2, MapPin } from "lucide-react"; // Importar Loader2 e MapPin
 
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -38,13 +39,14 @@ const baseAdFormSchema = z.object({
   title: z.string().min(5, "O título deve ter pelo menos 5 caracteres."),
   description: z.string().min(10, "A descrição deve ter pelo menos 10 caracteres."),
   price: z.coerce.number().positive("O preço deve ser um valor positivo.").optional(),
-  images: z.array(z.instanceof(File))
+  // Alterado para aceitar File ou string (para caminhos de imagens existentes)
+  images: z.array(z.union([z.instanceof(File), z.string()]))
     .min(1, "Pelo menos uma imagem é obrigatória.")
     .max(MAX_FILES, `Você pode enviar no máximo ${MAX_FILES} imagens.`)
-    .refine(files => files.every(file => file.size <= MAX_FILE_SIZE), `Cada arquivo deve ter no máximo 5MB.`),
-  // category_slug será definido dinamicamente e validado via superRefine
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+    .refine(files => files.every(file => typeof file === 'string' || file.size <= MAX_FILE_SIZE), `Cada arquivo deve ter no máximo 5MB.`),
+  category_slug: z.string().min(1, "Por favor, selecione uma categoria."),
+  latitude: z.number().optional().nullable(), // Permitir null
+  longitude: z.number().optional().nullable(), // Permitir null
 }).catchall(z.any()); // Permite campos dinâmicos para metadados
 
 // Aplica superRefine ao esquema base para validações complexas
@@ -58,15 +60,6 @@ const adFormSchema = baseAdFormSchema.superRefine((data, ctx) => {
       code: z.ZodIssueCode.custom,
       message: "Por favor, insira um preço válido e positivo para esta categoria.",
       path: ['price'],
-    });
-  }
-
-  // Validação para garantir que uma categoria final foi selecionada
-  if (!data.category_slug) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Por favor, selecione uma categoria.",
-      path: ['category_slug'],
     });
   }
 });
@@ -85,7 +78,7 @@ const CreateAd = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categoryConfig, setCategoryConfig] = useState<any>({ hasPriceFilter: true, fields: [] });
   const [selectedCategoryPath, setSelectedCategoryPath] = useState<string[]>([]);
-  const [finalCategorySlug, setFinalCategorySlug] = useState<string>('');
+  const [isLocating, setIsLocating] = useState(false); // Novo estado para o carregamento da localização
 
   const { data: allCategories, isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ["categories"],
@@ -98,36 +91,23 @@ const CreateAd = () => {
       title: "",
       description: "",
       images: [],
-      // category_slug não é um campo direto aqui, mas será definido via setValue
+      category_slug: "",
+      latitude: null, // Definir como null por padrão
+      longitude: null, // Definir como null por padrão
     },
     context: { categoryConfig }, // Passa categoryConfig para superRefine
   });
-
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        form.setValue('latitude', position.coords.latitude);
-        form.setValue('longitude', position.coords.longitude);
-      },
-      (err) => {
-        console.warn(`WARN: ${err.message}`);
-      }
-    );
-  }, [form]);
 
   // Efeito para atualizar finalCategorySlug e categoryConfig com base no caminho selecionado
   useEffect(() => {
     if (selectedCategoryPath.length > 0) {
       const deepestSlug = selectedCategoryPath[selectedCategoryPath.length - 1];
-      setFinalCategorySlug(deepestSlug);
       const currentCategory = allCategories?.find(c => c.slug === deepestSlug);
       setCategoryConfig(currentCategory?.custom_fields || { hasPriceFilter: true, fields: [] });
-      // Define o valor do campo 'category_slug' no formulário para validação
       form.setValue('category_slug', deepestSlug, { shouldValidate: true });
     } else {
-      setFinalCategorySlug('');
       setCategoryConfig({ hasPriceFilter: true, fields: [] });
-      form.setValue('category_slug', '', { shouldValidate: true }); // Garante que o campo esteja vazio se nenhuma categoria for selecionada
+      form.setValue('category_slug', '', { shouldValidate: true });
     }
   }, [selectedCategoryPath, allCategories, form]);
 
@@ -150,21 +130,11 @@ const CreateAd = () => {
     let currentParentSlug: string | null = null;
     const selects = [];
 
-    // Começa com a categoria principal (parent_slug = null)
     const initialCategories = getChildCategories(null);
-    if (initialCategories.length === 0 && allCategories && allCategories.length > 0) {
-      // Fallback: se não houver categorias top-level, mas houver categorias,
-      // pode ser um problema de dados ou todas são subcategorias.
-      // Para evitar tela em branco, podemos mostrar todas as categorias como top-level
-      // ou um aviso. Por enquanto, vamos assumir que sempre haverá top-level.
-      // Se não houver nenhuma categoria cadastrada, o seletor ficará vazio.
-    }
 
-    // Loop para renderizar seletores para cada nível
     for (let i = 0; i <= selectedCategoryPath.length; i++) {
       const categoriesAtLevel = getChildCategories(currentParentSlug);
 
-      // Se não houver categorias neste nível e não for o primeiro seletor, pare de renderizar
       if (categoriesAtLevel.length === 0 && i > 0) {
         break;
       }
@@ -176,8 +146,7 @@ const CreateAd = () => {
         <FormField
           key={`category-level-${level}`}
           control={form.control}
-          // Usamos um nome de campo dummy para o form.control, pois o valor final é em finalCategorySlug
-          name={`category_level_${level}` as any}
+          name={`category_level_${level}` as any} // Usamos um nome de campo dummy
           render={({ field }) => (
             <FormItem>
               <FormLabel>{level === 0 ? "Categoria Principal" : `Subcategoria ${level + 1}`}</FormLabel>
@@ -188,8 +157,7 @@ const CreateAd = () => {
                     newPath.push(value);
                   }
                   setSelectedCategoryPath(newPath);
-                  // Limpa os valores dos campos subsequentes no formulário
-                  for (let j = level + 1; j < 5; j++) { // Assumindo um máximo de 5 níveis para limpeza
+                  for (let j = level + 1; j < 5; j++) {
                     form.setValue(`category_level_${j}` as any, '');
                   }
                 }}
@@ -216,6 +184,29 @@ const CreateAd = () => {
     return selects;
   };
 
+  const handleGetLocation = () => {
+    setIsLocating(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          form.setValue('latitude', position.coords.latitude);
+          form.setValue('longitude', position.coords.longitude);
+          showSuccess("Localização obtida com sucesso!");
+          setIsLocating(false);
+        },
+        (err) => {
+          console.warn(`WARN: ${err.message}`);
+          showError("Não foi possível obter a localização. Verifique as permissões do navegador.");
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    } else {
+      showError("Geolocalização não é suportada pelo seu navegador.");
+      setIsLocating(false);
+    }
+  };
+
   async function onSubmit(values: z.infer<typeof adFormSchema>) {
     if (!user) {
       showError("Você precisa estar logado para criar um anúncio.");
@@ -224,14 +215,24 @@ const CreateAd = () => {
 
     setIsSubmitting(true);
     const toastId = showLoading("Publicando seu anúncio...");
-    const uploadedImagePaths: string[] = [];
+    
+    const finalImageUrls: string[] = [];
+    const newImageFiles: File[] = [];
+    const uploadedFilePaths: string[] = []; // Para rastrear uploads bem-sucedidos para limpeza
+
+    // Separa as imagens em novas (File) e existentes (string)
+    values.images.forEach(image => {
+      if (typeof image === 'string') {
+        finalImageUrls.push(image); // Já é um caminho relativo
+      } else {
+        newImageFiles.push(image);
+      }
+    });
 
     try {
-      const imageFiles = values.images;
-      
-      const uploadPromises = imageFiles.map(file => {
+      // Upload das novas imagens
+      const uploadPromises = newImageFiles.map(file => {
         const fileName = `${user.id}/${Date.now()}-${Math.random()}-${file.name}`;
-        uploadedImagePaths.push(fileName);
         return supabase.storage.from("advertisements").upload(fileName, file);
       });
 
@@ -242,11 +243,12 @@ const CreateAd = () => {
         throw new Error(`Erro no upload de ${uploadErrors.length} imagem(ns): ${uploadErrors[0].error.message}`);
       }
 
-      const imageUrls = uploadResults.map(result => {
-        if (!result.data?.path) {
-          throw new Error("Um caminho de imagem não foi retornado após o upload.");
+      // Adiciona os caminhos das novas imagens à lista final e ao rastreador de uploads
+      uploadResults.forEach(result => {
+        if (result.data?.path) {
+          finalImageUrls.push(result.data.path);
+          uploadedFilePaths.push(result.data.path); // Rastreia para limpeza
         }
-        return supabase.storage.from("advertisements").getPublicUrl(result.data.path).data.publicUrl;
       });
 
       // Campos padrão que não devem ir para metadata
@@ -265,8 +267,8 @@ const CreateAd = () => {
           title: values.title,
           description: values.description,
           price: values.price,
-          category_slug: finalCategorySlug, // Usa a categoria mais específica selecionada
-          image_urls: imageUrls,
+          category_slug: values.category_slug,
+          image_urls: finalImageUrls, // Usa a lista final de caminhos relativos
           user_id: user.id,
           metadata: Object.keys(metadata).length > 0 ? metadata : null,
           latitude: values.latitude,
@@ -286,7 +288,6 @@ const CreateAd = () => {
       if (adCountError) {
         console.error("Erro ao contar anúncios do usuário:", adCountError);
       } else if (count === 1) {
-        // É o primeiro anúncio, então concede o bônus
         const { error: creditsInsertError } = await supabase.from("user_credits").insert({ user_id: user.id, balance: 50 });
         if (creditsInsertError) throw creditsInsertError;
 
@@ -302,8 +303,9 @@ const CreateAd = () => {
 
       navigate(`/perfil`);
     } catch (error) {
-      if (uploadedImagePaths.length > 0) {
-        await supabase.storage.from("advertisements").remove(uploadedImagePaths);
+      // Em caso de erro, tenta remover as imagens que foram recém-enviadas
+      if (uploadedFilePaths.length > 0) {
+         await supabase.storage.from("advertisements").remove(uploadedFilePaths).catch(e => console.error("Erro ao limpar imagens após falha:", e));
       }
       dismissToast(toastId);
       showError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido.");
@@ -328,12 +330,16 @@ const CreateAd = () => {
                   <FormLabel>Imagens do Anúncio</FormLabel>
                   <FormControl>
                     <MultiImageUploader
-                      onChange={field.onChange}
+                      onChange={(files) => {
+                        console.log("CreateAd: MultiImageUploader onChange called. Files:", files);
+                        field.onChange(files);
+                      }}
                       maxFiles={MAX_FILES}
+                      initialImageUrls={[]} // Para novos anúncios, não há imagens iniciais
                     />
                   </FormControl>
                    <FormDescription>
-                    A primeira imagem será a capa do seu anúncio.
+                    A primeira imagem será a capa do seu anúncio. Arraste para reordenar.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -348,7 +354,7 @@ const CreateAd = () => {
               name="category_slug"
               render={({ field }) => (
                 <FormItem className="hidden">
-                  <FormControl><Input {...field} value={finalCategorySlug} /></FormControl>
+                  <FormControl><Input {...field} value={field.value || ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -429,8 +435,61 @@ const CreateAd = () => {
               />
             ))}
 
+            <div className="space-y-4 border-t pt-6">
+              <h3 className="text-lg font-medium">Localização</h3>
+              <p className="text-sm text-muted-foreground">
+                Adicione sua localização para que seu anúncio seja encontrado por pessoas próximas.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="latitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Latitude</FormLabel>
+                      <FormControl><Input type="number" step="any" placeholder="Ex: -22.2222" {...field} disabled /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="longitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Longitude</FormLabel>
+                      <FormControl><Input type="number" step="any" placeholder="Ex: -55.5555" {...field} disabled /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <Button type="button" onClick={handleGetLocation} disabled={isLocating}>
+                {isLocating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Obtendo localização...
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="mr-2 h-4 w-4" /> Usar minha localização atual
+                  </>
+                )}
+              </Button>
+              {form.getValues('latitude') && form.getValues('longitude') && (
+                <p className="text-sm text-muted-foreground">
+                  Localização atual: {form.getValues('latitude')?.toFixed(4)}, {form.getValues('longitude')?.toFixed(4)}
+                </p>
+              )}
+            </div>
+
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Publicando..." : "Publicar Anúncio"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Publicando...
+                </>
+              ) : (
+                "Publicar Anúncio"
+              )}
             </Button>
           </form>
         </Form>

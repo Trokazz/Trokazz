@@ -1,83 +1,84 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Skeleton } from "@/components/ui/skeleton";
-import WantedAdCard, { WantedAd } from "@/components/WantedAdCard";
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+"use client";
 
-const fetchWantedAds = async () => {
-  const { data: ads, error } = await supabase
-    .from("wanted_ads")
-    .select("*")
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { supabase } from '../integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import WantedAdCard, { WantedAd } from '@/components/WantedAdCard'; // Importado WantedAdCard
 
-  if (error) throw new Error(error.message);
-  if (!ads || ads.length === 0) return [];
+const WantedAdsList: React.FC = () => {
+  const [ads, setAds] = useState<WantedAd[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  const userIds = [...new Set(ads.map(ad => ad.user_id))];
+  useEffect(() => {
+    const fetchWantedAds = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase
+          .from('wanted_ads')
+          .select('*, profiles(full_name, avatar_url, username), categories(name)') // Incluído categories(name)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false });
 
-  const { data: profiles, error: profilesError } = await supabase
-    .from("profiles")
-    .select("id, full_name, avatar_url, username")
-    .in("id", userIds);
+        if (error) {
+          throw error;
+        }
 
-  if (profilesError) throw profilesError;
+        // Mapear os dados para incluir category_name diretamente no objeto WantedAd
+        const formattedAds = data.map(ad => ({
+          ...ad,
+          category_name: (ad.categories as { name: string } | null)?.name || ad.category_slug, // Usa o nome da categoria ou o slug como fallback
+        }));
 
-  const combinedData = ads.map(ad => ({
-    ...ad,
-    profiles: profiles.find(p => p.id === ad.user_id) || null,
-  }));
+        setAds(formattedAds as WantedAd[]);
+      } catch (err) {
+        console.error('Error fetching wanted ads:', err);
+        setError(err as Error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  return combinedData as WantedAd[];
-};
-
-const WantedAdsList = () => {
-  const { data: ads, isLoading, error } = useQuery({
-    queryKey: ["wantedAds"],
-    queryFn: fetchWantedAds,
-  });
+    fetchWantedAds();
+  }, []);
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Mural de Procurados</h1>
-          <p className="text-muted-foreground">Veja o que as pessoas estão precisando e venda mais rápido.</p>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold text-center mb-8">Mural de Procurados</h1>
+      <p className="text-center text-gray-600 mb-10">
+        Encontre o que você precisa! Navegue pelos anúncios de procura ou crie o seu próprio.
+      </p>
+
+      <div className="flex justify-center mb-8">
         <Button asChild>
-          <Link to="/procurar/novo">Anunciar Procura</Link>
+          <Link to="/procurar/novo">Criar Anúncio de Procura</Link>
         </Button>
       </div>
 
-      <section>
-        {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="space-y-2 border p-4 rounded-lg">
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-4 w-1/2" />
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ))}
-          </div>
-        )}
-        {error && <p className="text-red-500">Erro ao carregar o mural: {error.message}</p>}
-        {!isLoading && !error && ads && ads.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {ads.map((ad) => (
-              <WantedAdCard key={ad.id} ad={ad} />
-            ))}
-          </div>
-        )}
-        {!isLoading && !error && ads?.length === 0 && (
-          <div className="text-center py-16 border-dashed border-2 rounded-lg">
-            <h2 className="text-xl font-semibold">O mural está vazio por enquanto.</h2>
-            <p className="text-muted-foreground mt-2">Seja o primeiro a anunciar o que você procura!</p>
-          </div>
-        )}
-      </section>
+      {isLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-6 w-3/4" />
+              <Skeleton className="h-6 w-1/2" />
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <p className="text-red-500 text-center">Erro ao carregar o mural: {error.message}</p>}
+      {!isLoading && !error && ads && ads.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {ads.map((ad) => (
+            <WantedAdCard key={ad.id} ad={ad} />
+          ))}
+        </div>
+      ) : (
+        !isLoading && !error && <p className="text-center text-gray-500">Nenhum anúncio de procura ativo encontrado.</p>
+      )}
     </div>
   );
 };
