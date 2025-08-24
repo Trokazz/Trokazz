@@ -20,6 +20,7 @@ const FavoritesPage = lazy(() => import("./pages/FavoritesPage")); // NEW: Favor
 const VerificationPage = lazy(() => import("./pages/VerificationPage")); // NEW: Verification Page
 const UserSupportTicketsPage = lazy(() => import("./pages/UserSupportTicketsPage")); // NEW: User Support Tickets Page
 const MyReviewsPage = lazy(() => import("./pages/MyReviewsPage")); // NEW: My Reviews Page
+const PublicProfilePage = lazy(() => import("./pages/PublicProfilePage")); // Importar PublicProfilePage
 
 const CreateAd = lazy(() => import("./pages/CreateAd"));
 const EditMyAd = lazy(() => import("./pages/EditMyAd"));
@@ -39,6 +40,7 @@ const AboutUs = lazy(() => import("./pages/AboutUs"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Inbox = lazy(() => import("./pages/Inbox")); // Importar Inbox
 
 // Admin Pages
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -83,6 +85,11 @@ const router = createBrowserRouter([
       { path: "/about-us", element: <AboutUs /> },
       { path: "/terms-of-service", element: <TermsOfService /> },
       { path: "/privacy-policy", element: <PrivacyPolicy /> },
+      { 
+        path: "/loja/:username", 
+        element: <PublicProfilePage />, 
+        /* Adicionado a rota para o perfil público aqui */ 
+      },
       {
         element: <ProtectedRoute />,
         children: [
@@ -101,6 +108,7 @@ const router = createBrowserRouter([
           { path: "/perfil/support-tickets/:ticketId", element: <UserTicketDetails /> },
           { path: "/novo-anuncio", element: <CreateAd /> },
           { path: "/chat/:conversationId", element: <Conversation /> },
+          { path: "/inbox", element: <Inbox /> }, {/* Adicionado a rota /inbox aqui */}
         ],
       },
       { path: "*", element: <NotFound /> },
