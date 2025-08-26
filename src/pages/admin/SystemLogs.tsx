@@ -8,9 +8,23 @@ import { Input } from "@/components/ui/input";
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlertTriangle, Info, Bug } from "lucide-react";
+import { AlertTriangle, Info, Bug, Trash2, Loader2 } from "lucide-react";
 import { PaginationControls } from "@/components/PaginationControls";
 import { useSearchParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const LOGS_PER_PAGE = 15;
 
@@ -26,7 +40,7 @@ type SystemLog = {
 const fetchSystemLogs = async ({ page, levelFilter, searchTerm }: { page: number; levelFilter: string; searchTerm: string }) => {
   let query = supabase
     .from("system_logs")
-    .select("id, timestamp, level, message, function_name, context", { count: 'exact' }) // Otimizado aqui
+    .select("id, timestamp, level, message, function_name, context", { count: 'exact' })
     .order("timestamp", { ascending: false });
 
   if (levelFilter !== 'ALL') {
@@ -50,6 +64,10 @@ const SystemLogs = () => {
   const currentPage = Number(searchParams.get("page") || "1");
   const [levelFilter, setLevelFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDeletingErrors, setIsDeletingErrors] = useState(false);
+  const [isDeletingInfos, setIsDeletingInfos] = useState(false);
+  const [isDeletingWarns, setIsDeletingWarns] = useState(false); // Novo estado para logs WARN
+  const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["systemLogs", currentPage, levelFilter, searchTerm],
@@ -73,6 +91,33 @@ const SystemLogs = () => {
       case 'WARN': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300';
       case 'ERROR': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300';
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300';
+    }
+  };
+
+  const handleDeleteLogs = async (levelToDelete: 'INFO' | 'WARN' | 'ERROR') => {
+    if (levelToDelete === 'ERROR') setIsDeletingErrors(true);
+    if (levelToDelete === 'INFO') setIsDeletingInfos(true);
+    if (levelToDelete === 'WARN') setIsDeletingWarns(true); // Ativa o estado de carregamento para WARN
+
+    const toastId = showLoading(`Apagando logs de ${levelToDelete}...`);
+    try {
+      const { error } = await supabase
+        .from("system_logs")
+        .delete()
+        .eq('level', levelToDelete);
+
+      if (error) throw error;
+
+      dismissToast(toastId);
+      showSuccess(`Todos os logs de ${levelToDelete} foram apagados com sucesso!`);
+      queryClient.invalidateQueries({ queryKey: ["systemLogs"] });
+    } catch (err) {
+      dismissToast(toastId);
+      showError(err instanceof Error ? err.message : `Não foi possível apagar os logs de ${levelToDelete}.`);
+    } finally {
+      if (levelToDelete === 'ERROR') setIsDeletingErrors(false);
+      if (levelToDelete === 'INFO') setIsDeletingInfos(false);
+      if (levelToDelete === 'WARN') setIsDeletingWarns(false); // Desativa o estado de carregamento para WARN
     }
   };
 
@@ -102,6 +147,114 @@ const SystemLogs = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" className="w-full sm:w-auto" disabled={isDeletingErrors}>
+                {isDeletingErrors ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Limpando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" /> Limpar Todos os Erros
+                  </>
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita. Isso excluirá permanentemente todos os logs de nível "ERROR" do sistema.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => handleDeleteLogs('ERROR')} disabled={isDeletingErrors}>
+                  {isDeletingErrors ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Limpando...
+                    </>
+                  ) : (
+                    "Sim, Limpar Erros"
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto" disabled={isDeletingInfos}>
+                {isDeletingInfos ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Limpando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" /> Limpar Logs INFO
+                  </>
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita. Isso excluirá permanentemente todos os logs de nível "INFO" do sistema.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => handleDeleteLogs('INFO')} disabled={isDeletingInfos}>
+                  {isDeletingInfos ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Limpando...
+                    </>
+                  ) : (
+                    "Sim, Limpar INFO"
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* NOVO: Botão para limpar logs WARN */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="secondary" className="w-full sm:w-auto" disabled={isDeletingWarns}>
+                {isDeletingWarns ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Limpando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" /> Limpar Logs WARN
+                  </>
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita. Isso excluirá permanentemente todos os logs de nível "WARN" do sistema.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => handleDeleteLogs('WARN')} disabled={isDeletingWarns}>
+                  {isDeletingWarns ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Limpando...
+                    </>
+                  ) : (
+                    "Sim, Limpar WARN"
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </CardHeader>
       <CardContent>

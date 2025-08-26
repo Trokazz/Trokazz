@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Trash2, Edit, PlusCircle, Loader2 } from "lucide-react";
 import {
@@ -21,33 +21,32 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import ImageUploader from "@/components/ImageUploader"; // Importar ImageUploader
-import { getRelativePathFromUrlOrPath } from "@/lib/utils"; // Importar getRelativePathFromUrlOrPath
+import { Switch } from "@/components/ui/switch";
+import * as Icons from "lucide-react"; // Importar todos os ícones Lucide
+import { Database } from "@/types/supabase"; // Importar o tipo Database
 
 const categorySchema = z.object({
-  name: z.string().min(1, "O nome é obrigatório."),
-  slug: z.string().min(1, "O slug é obrigatório."),
-  icon: z.string().min(1, "O ícone é obrigatório (ex: Car, Home)."),
-  parent_slug: z.string().nullable().optional(),
-  custom_fields: z.string().optional().refine(val => {
-    if (!val || val.trim() === '') return true;
-    try {
-      JSON.parse(val);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }, { message: "O JSON dos campos customizados é inválido." }),
-  connected_service_tags: z.string().optional(),
-  image: z.instanceof(File).nullable().optional(), // Novo campo para a imagem
+  name: z.string().min(1, "O nome da categoria é obrigatório."),
+  slug: z.string().min(1, "O slug é obrigatório.").regex(/^[a-z0-9-]+$/, "O slug deve conter apenas letras minúsculas, números e hífens."),
+  icon: z.string().optional().nullable(),
+  parent_slug: z.string().optional().nullable(),
+  image_url: z.string().optional().nullable(),
+  custom_fields: z.string().optional().nullable(), // JSON string
+  connected_service_tags: z.string().optional().nullable(), // Comma-separated string
 });
 
-type Category = { id: string; name: string; slug: string; icon: string; custom_fields: any; connected_service_tags: string[] | null; parent_slug: string | null; image_url: string | null };
+type Category = Database['public']['Tables']['categories']['Row'];
+type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
+type CategoryUpdate = Database['public']['Tables']['categories']['Update'];
 
 const fetchCategories = async () => {
-  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_slug, icon, connected_service_tags, custom_fields, image_url").order("name");
-  if (error) throw new Error(error.message);
+  console.log("ManageCategories: Buscando categorias...");
+  const { data, error } = await supabase.from("categories").select("*").order("name");
+  if (error) {
+    console.error("ManageCategories: Erro ao buscar categorias:", error);
+    throw new Error(error.message);
+  }
+  console.log("ManageCategories: Categorias buscadas:", data);
   return data;
 };
 
@@ -56,10 +55,9 @@ const ManageCategories = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null); // Para exibir a imagem atual no uploader
 
   const { data: categories, isLoading } = useQuery({
-    queryKey: ["allCategories"],
+    queryKey: ["categories"],
     queryFn: fetchCategories,
   });
 
@@ -70,105 +68,113 @@ const ManageCategories = () => {
   const handleOpenDialog = (category: Category | null = null) => {
     setEditingCategory(category);
     form.reset({
-      name: category ? category.name : "",
-      slug: category ? category.slug : "",
-      icon: category ? category.icon : "",
-      parent_slug: category ? category.parent_slug : null,
-      custom_fields: category && category.custom_fields ? JSON.stringify(category.custom_fields, null, 2) : "",
+      name: category?.name || "",
+      slug: category?.slug || "",
+      icon: category?.icon || "",
+      parent_slug: category?.parent_slug || "",
+      image_url: category?.image_url || "",
+      custom_fields: category?.custom_fields ? JSON.stringify(category.custom_fields, null, 2) : "",
       connected_service_tags: category?.connected_service_tags?.join(', ') || "",
-      image: null, // Resetar o campo de arquivo
     });
-    setCurrentImageUrl(category?.image_url || null); // Definir a URL da imagem atual
     setIsDialogOpen(true);
   };
 
   const onSubmit = async (values: z.infer<typeof categorySchema>) => {
     setIsSubmitting(true);
     const toastId = showLoading(editingCategory ? "Atualizando categoria..." : "Criando categoria...");
-    let newImageUrl: string | null = currentImageUrl; // Começa com a imagem existente
-
     try {
-      // Lidar com o upload da imagem
-      const imageFile = values.image;
-      if (imageFile) {
-        // Se houver uma imagem existente e uma nova for enviada, deleta a antiga
-        if (currentImageUrl) {
-          const oldImagePath = getRelativePathFromUrlOrPath(currentImageUrl, 'category_images');
-          await supabase.storage.from("category_images").remove([oldImagePath]);
+      let parsedCustomFields: Database['public']['Tables']['categories']['Update']['custom_fields'] = null;
+      if (values.custom_fields) {
+        try {
+          const trimmedCustomFields = values.custom_fields.trim();
+          if (trimmedCustomFields !== "") {
+            parsedCustomFields = JSON.parse(trimmedCustomFields);
+            console.log("ManageCategories: Parsed custom_fields before sending to DB:", parsedCustomFields);
+          } else {
+            console.log("ManageCategories: custom_fields string is empty, setting to null.");
+          }
+        } catch (e) {
+          console.error("ManageCategories: JSON parse error for custom_fields:", e);
+          throw new Error("Formato JSON inválido para 'Configuração de Filtros'.");
         }
-        const fileName = `${values.slug}-${Date.now()}-${imageFile.name}`;
-        const { error: uploadError } = await supabase.storage.from("category_images").upload(fileName, imageFile);
-        if (uploadError) throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
-        newImageUrl = fileName; // Armazena o caminho relativo
-      } else if (currentImageUrl && !imageFile && !form.formState.dirtyFields.image) {
-        // Se não houver nova imagem e a imagem existente não foi removida, mantém a URL existente
-        newImageUrl = currentImageUrl;
-      } else if (!imageFile && !currentImageUrl) {
-        // Se não houver imagem e não houver imagem existente, define como null
-        newImageUrl = null;
       }
 
-      const customFields = values.custom_fields && values.custom_fields.trim() !== '' ? JSON.parse(values.custom_fields) : null;
-      const serviceTagsArray = values.connected_service_tags?.split(',').map(tag => tag.trim()).filter(Boolean) || null;
-      
-      const payload = {
-        name: values.name,
-        slug: values.slug,
-        icon: values.icon,
-        parent_slug: values.parent_slug,
-        custom_fields: customFields,
-        connected_service_tags: serviceTagsArray,
-        image_url: newImageUrl, // Incluir a nova URL da imagem
-      };
+      const connectedServiceTagsArray = values.connected_service_tags?.split(',').map(tag => tag.trim()).filter(Boolean) || null;
 
       let error;
       if (editingCategory) {
-        ({ error } = await supabase.from("categories").update(payload).eq("id", editingCategory.id));
+        const payload: CategoryUpdate = {
+          name: values.name,
+          icon: values.icon,
+          parent_slug: values.parent_slug || null,
+          image_url: values.image_url || null,
+          custom_fields: parsedCustomFields,
+          connected_service_tags: connectedServiceTagsArray,
+        };
+        console.log("ManageCategories: Updating category with payload:", payload);
+        ({ error } = await supabase.from("categories").update(payload).eq("slug", editingCategory.slug));
       } else {
+        const payload: CategoryInsert = {
+          name: values.name,
+          slug: values.slug,
+          icon: values.icon || null,
+          parent_slug: values.parent_slug || null,
+          image_url: values.image_url || null,
+          custom_fields: parsedCustomFields,
+          connected_service_tags: connectedServiceTagsArray,
+        };
+        console.log("ManageCategories: Inserting category with payload:", payload);
         ({ error } = await supabase.from("categories").insert(payload));
       }
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (error.code === '23505') { // Unique violation
+          throw new Error("Uma categoria com este slug já existe.");
+        }
+        throw new Error(error.message);
+      }
 
       dismissToast(toastId);
       showSuccess(`Categoria ${editingCategory ? "atualizada" : "criada"} com sucesso!`);
-      queryClient.invalidateQueries({ queryKey: ["allCategories"] });
-      queryClient.invalidateQueries({ queryKey: ["categories"] }); // Invalida para o SubHeader e CategoryGrid
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.refetchQueries({ queryKey: ["categories"] }); // Força a re-busca para garantir a atualização
       setIsDialogOpen(false);
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
+      console.error("ManageCategories: Error during onSubmit:", err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDelete = async (category: Category) => {
+  const handleDelete = async (slug: string) => {
     const toastId = showLoading("Excluindo categoria...");
     try {
-      // Deletar imagem do storage se existir
-      if (category.image_url) {
-        const imagePath = getRelativePathFromUrlOrPath(category.image_url, 'category_images');
-        await supabase.storage.from("category_images").remove([imagePath]);
-      }
-
-      const { error } = await supabase.from("categories").delete().eq("id", category.id);
+      const { error } = await supabase.from("categories").delete().eq("slug", slug);
       if (error) throw new Error(error.message);
       dismissToast(toastId);
       showSuccess("Categoria excluída com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["allCategories"] });
-      queryClient.invalidateQueries({ queryKey: ["categories"] }); // Invalida para o SubHeader e CategoryGrid
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.refetchQueries({ queryKey: ["categories"] }); // Força a re-busca para garantir a atualização
     } catch (err) {
       dismissToast(toastId);
       showError(err instanceof Error ? err.message : "Ocorreu um erro.");
     }
   };
 
-  const topLevelCategories = categories?.filter(cat => !cat.parent_slug) || [];
+  const renderIcon = (iconName: string | null) => {
+    if (!iconName) return <Icons.HelpCircle className="h-5 w-5 text-muted-foreground" />;
+    const Icon = (Icons as any)[iconName] || Icons.HelpCircle;
+    return <Icon className="h-5 w-5 text-muted-foreground" />;
+  };
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Gerenciar Categorias</CardTitle>
+        <div>
+          <CardTitle>Gerenciar Categorias</CardTitle>
+          <CardDescription>Crie e edite as categorias de anúncios do seu site.</CardDescription>
+        </div>
         <Button onClick={() => handleOpenDialog()}>
           <PlusCircle className="mr-2 h-4 w-4" /> Nova Categoria
         </Button>
@@ -180,49 +186,40 @@ const ManageCategories = () => {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Slug</TableHead>
-                <TableHead>Pai</TableHead>
                 <TableHead>Ícone</TableHead>
-                <TableHead>Imagem</TableHead> {/* Nova coluna */}
-                <TableHead>Tags de Serviço</TableHead>
+                <TableHead>Categoria Pai</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-10 w-10 rounded-md" /></TableCell> {/* Skeleton para a nova coluna */}
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-8 inline-block" /></TableCell>
+                  <TableCell colSpan={5}><Skeleton className="h-8 w-full" /></TableCell>
                 </TableRow>
               ))}
-              {categories?.map((cat: Category) => (
-                <TableRow key={cat.id}>
-                  <TableCell className="font-medium">{cat.name}</TableCell>
-                  <TableCell>{cat.slug}</TableCell>
-                  <TableCell>{cat.parent_slug ? categories.find(p => p.slug === cat.parent_slug)?.name : '-'}</TableCell>
-                  <TableCell>{cat.icon}</TableCell>
-                  <TableCell>
-                    {cat.image_url ? (
-                      <img src={supabase.storage.from("category_images").getPublicUrl(getRelativePathFromUrlOrPath(cat.image_url, 'category_images')).data.publicUrl} alt={cat.name} className="h-10 w-10 object-cover rounded-md" />
-                    ) : (
-                      '-'
-                    )}
-                  </TableCell>
-                  <TableCell>{cat.connected_service_tags?.join(', ')}</TableCell>
+              {categories?.map((category: Category) => (
+                <TableRow key={category.slug}>
+                  <TableCell className="font-medium">{category.name}</TableCell>
+                  <TableCell>{category.slug}</TableCell>
+                  <TableCell className="flex items-center gap-2">{renderIcon(category.icon)} {category.icon}</TableCell>
+                  <TableCell>{category.parent_slug || '-'}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(cat)}>
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(category)}>
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(cat)}>
+                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(category.slug)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
+              {!isLoading && categories?.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    Nenhuma categoria encontrada.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>
@@ -232,80 +229,54 @@ const ManageCategories = () => {
           <DialogHeader>
             <DialogTitle>{editingCategory ? "Editar" : "Nova"} Categoria</DialogTitle>
             <DialogDescription>
-              Configure os detalhes e conexões da categoria.
+              Defina os detalhes da categoria e seus campos customizados.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <Label htmlFor="name">Nome</Label>
+              <Label htmlFor="name">Nome da Categoria</Label>
               <Input id="name" {...form.register("name")} />
               {form.formState.errors.name && <p className="text-red-500 text-sm">{form.formState.errors.name.message}</p>}
             </div>
             <div>
-              <Label htmlFor="slug">Slug</Label>
-              <Input id="slug" {...form.register("slug")} />
+              <Label htmlFor="slug">Slug (URL)</Label>
+              <Input id="slug" {...form.register("slug")} disabled={!!editingCategory} />
               {form.formState.errors.slug && <p className="text-red-500 text-sm">{form.formState.errors.slug.message}</p>}
             </div>
             <div>
-              <Label htmlFor="parent_slug">Categoria Pai (Opcional)</Label>
-              <Select onValueChange={(value) => form.setValue("parent_slug", value === "" ? null : value)} value={form.watch("parent_slug") || ""}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma categoria pai" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Nenhuma (Categoria Principal)</SelectItem>
-                  {topLevelCategories.filter(cat => cat.id !== editingCategory?.id).map(cat => (
-                    <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.parent_slug && <p className="text-red-500 text-sm">{form.formState.errors.parent_slug.message}</p>}
-            </div>
-            <div>
               <Label htmlFor="icon">Ícone (Lucide)</Label>
-              <Input id="icon" {...form.register("icon")} />
+              <Input id="icon" {...form.register("icon")} placeholder="Ex: Car, Home, Smartphone" />
               {form.formState.errors.icon && <p className="text-red-500 text-sm">{form.formState.errors.icon.message}</p>}
             </div>
             <div>
-              <Label htmlFor="image">Imagem da Categoria (Opcional)</Label>
-              <ImageUploader
-                onFileChange={(file) => {
-                  form.setValue("image", file);
-                  setCurrentImageUrl(file ? URL.createObjectURL(file) : null); // Atualiza a pré-visualização
-                }}
-                title="Arraste e solte ou clique para selecionar uma imagem"
-                initialImageUrl={currentImageUrl ? supabase.storage.from("category_images").getPublicUrl(getRelativePathFromUrlOrPath(currentImageUrl, 'category_images')).data.publicUrl : undefined}
-              />
-              {form.formState.errors.image && <p className="text-red-500 text-sm">{form.formState.errors.image.message}</p>}
-              <p className="text-sm text-muted-foreground mt-1">
-                Esta imagem será usada para representar a categoria na página inicial e no cabeçalho.
-              </p>
+              <Label htmlFor="parent_slug">Categoria Pai (Slug)</Label>
+              <Input id="parent_slug" {...form.register("parent_slug")} placeholder="Deixe em branco para categoria principal" />
+              {form.formState.errors.parent_slug && <p className="text-red-500 text-sm">{form.formState.errors.parent_slug.message}</p>}
             </div>
             <div>
-              <Label htmlFor="connected_service_tags">Tags de Serviços Conectados</Label>
-              <Input id="connected_service_tags" {...form.register("connected_service_tags")} placeholder="Ex: montador_moveis, frete" />
-              <p className="text-sm text-muted-foreground mt-1">Separe as tags por vírgula.</p>
+              <Label htmlFor="image_url">URL da Imagem (Opcional)</Label>
+              <Input id="image_url" {...form.register("image_url")} placeholder="URL para imagem de destaque da categoria" />
+              {form.formState.errors.image_url && <p className="text-red-500 text-sm">{form.formState.errors.image_url.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="connected_service_tags">Tags de Serviço Conectadas (separadas por vírgula)</Label>
+              <Input id="connected_service_tags" {...form.register("connected_service_tags")} placeholder="Ex: eletricista, montador_moveis" />
+              <p className="text-sm text-muted-foreground mt-1">
+                Se esta categoria está relacionada a serviços (ex: "Eletrônicos" pode ter "instalador_eletronicos").
+              </p>
+              {form.formState.errors.connected_service_tags && <p className="text-red-500 text-sm">{form.formState.errors.connected_service_tags.message}</p>}
             </div>
             <div>
               <Label htmlFor="custom_fields">Configuração de Filtros (JSON)</Label>
               <Textarea
                 id="custom_fields"
                 {...form.register("custom_fields")}
-                rows={8}
-                placeholder={`{
-  "hasPriceFilter": false,
-  "fields": [
-    {
-      "name": "tipo",
-      "label": "Tipo",
-      "type": "select",
-      "options": ["Doação", "Troca", "Achado", "Perdido"]
-    }
-  ]
-}`}
+                rows={10}
+                className="font-mono"
+                placeholder={`{\n  "hasPriceFilter": true,\n  "fields": [\n    {\n      "name": "marca",\n      "label": "Marca",\n      "type": "text"\n    }\n  ]\n}`}
               />
               <p className="text-sm text-muted-foreground mt-1">
-                Use <span className="font-mono">"hasPriceFilter": false</span> para remover o preço. Tipos de campo: 'text', 'number', 'select'.
+                Defina campos adicionais e filtros para anúncios desta categoria em formato JSON.
               </p>
               {form.formState.errors.custom_fields && <p className="text-red-500 text-sm">{form.formState.errors.custom_fields.message}</p>}
             </div>

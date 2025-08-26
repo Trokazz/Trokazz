@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import AdsChart from "@/components/admin/AdsChart";
 import { subDays, format, eachDayOfInterval, parseISO } from 'date-fns';
-import AdminActivityFeed from "@/components/admin/AdminActivityFeed";
+// REMOVIDO: import AdminActivityFeed from "@/components/admin/AdminActivityFeed";
 import RealtimeUsers from "@/components/admin/RealtimeUsers";
 import ActionQueue from "@/components/admin/ActionQueue";
 
@@ -123,9 +123,9 @@ const AdminDashboard = () => {
         <AdsChart data={data?.adsByDay || []} />
         <ActionQueue />
       </div>
-      <div className="mt-6">
+      {/* REMOVIDO: <div className="mt-6">
         <AdminActivityFeed />
-      </div>
+      </div> */}
     </div>
   );
 };
