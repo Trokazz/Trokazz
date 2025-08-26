@@ -24,12 +24,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSession } from "@/contexts/SessionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import MultiImageUploader from "@/components/MultiImageUploader";
-import { Skeleton } from "@/components/ui/skeleton"; // Importar Skeleton
-import { useNavigate } from "react-router-dom"; // Adicionado: Importação do useNavigate
-import { Loader2, MapPin } from "lucide-react"; // Importar Loader2 e MapPin
+import { Skeleton } from "@/components/ui/skeleton";
+import { useNavigate } from "react-router-dom";
+import { Loader2, MapPin } from "lucide-react"; // Removido Lightbulb
 
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -47,15 +47,16 @@ const baseAdFormSchema = z.object({
   category_slug: z.string().min(1, "Por favor, selecione uma categoria."),
   latitude: z.number().optional().nullable(), // Permitir null
   longitude: z.number().optional().nullable(), // Permitir null
+  tags: z.string().optional().nullable(), // NOVO: Campo para tags
 }).catchall(z.any()); // Permite campos dinâmicos para metadados
 
 // Aplica superRefine ao esquema base para validações complexas
 const adFormSchema = baseAdFormSchema.superRefine((data, ctx) => {
   const context = (ctx as any)._root?.options?.context || {};
-  const category = context.categoryConfig || { hasPriceFilter: true, fields: [] };
+  const category = context.categoryConfig || { hasPriceFilter: false, fields: [] }; // Default para false aqui também
 
   // Validação condicional para o preço
-  if (category.hasPriceFilter !== false && (data.price === undefined || data.price === null || data.price <= 0)) {
+  if (category.hasPriceFilter === true && (data.price === undefined || data.price === null || data.price <= 0)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Por favor, insira um preço válido e positivo para esta categoria.",
@@ -76,9 +77,10 @@ const CreateAd = () => {
   const { user } = useSession();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [categoryConfig, setCategoryConfig] = useState<any>({ hasPriceFilter: true, fields: [] });
+  const [categoryConfig, setCategoryConfig] = useState<any>({ hasPriceFilter: false, fields: [] }); // Default para false
   const [selectedCategoryPath, setSelectedCategoryPath] = useState<string[]>([]);
   const [isLocating, setIsLocating] = useState(false); // Novo estado para o carregamento da localização
+  // REMOVIDO: const [isSuggestingCategory, setIsSuggestingCategory] = useState(false); // NOVO: Estado para sugestão de categoria
 
   const { data: allCategories, isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ["categories"],
@@ -94,6 +96,7 @@ const CreateAd = () => {
       category_slug: "",
       latitude: null, // Definir como null por padrão
       longitude: null, // Definir como null por padrão
+      tags: "", // NOVO: Default para tags
     },
     context: { categoryConfig }, // Passa categoryConfig para superRefine
   });
@@ -103,12 +106,28 @@ const CreateAd = () => {
     if (selectedCategoryPath.length > 0) {
       const deepestSlug = selectedCategoryPath[selectedCategoryPath.length - 1];
       const currentCategory = allCategories?.find(c => c.slug === deepestSlug);
-      // Garante que categoryConfig sempre tenha hasPriceFilter e fields definidos
-      setCategoryConfig({ hasPriceFilter: true, fields: [], ...(currentCategory?.custom_fields || {}) });
+      
+      let hasPriceFilter = false; // Default to false
+      let fields: any[] = [];
+
+      if (currentCategory?.custom_fields && typeof currentCategory.custom_fields === 'object') {
+        const rawCustomFields = currentCategory.custom_fields as { hasPriceFilter?: boolean; fields?: any[] };
+        if (rawCustomFields.hasPriceFilter === true) { // Only set to true if explicitly true
+          hasPriceFilter = true;
+        }
+        if (Array.isArray(rawCustomFields.fields)) {
+          fields = rawCustomFields.fields;
+        }
+      }
+      const newCategoryConfig = { hasPriceFilter, fields }; // Capture the new config
+      setCategoryConfig(newCategoryConfig);
       form.setValue('category_slug', deepestSlug, { shouldValidate: true });
+      console.log("CreateAd: Updated categoryConfig:", newCategoryConfig); // ADDED LOG
     } else {
-      setCategoryConfig({ hasPriceFilter: true, fields: [] }); // Default seguro
+      const defaultCategoryConfig = { hasPriceFilter: false, fields: [] };
+      setCategoryConfig(defaultCategoryConfig); // Default seguro
       form.setValue('category_slug', '', { shouldValidate: true });
+      console.log("CreateAd: Reset categoryConfig to default:", defaultCategoryConfig); // ADDED LOG
     }
   }, [selectedCategoryPath, allCategories, form]);
 
@@ -119,15 +138,7 @@ const CreateAd = () => {
 
   // Renderiza os seletores de categoria dinamicamente
   const renderCategorySelects = () => {
-    if (isLoadingCategories) {
-      return (
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      );
-    }
-
+    // Removed isLoadingCategories check from here, it's now at the top level
     let currentParentSlug: string | null = null;
     const selects = [];
 
@@ -208,6 +219,55 @@ const CreateAd = () => {
     }
   };
 
+  // REMOVIDO: Função para sugerir categoria
+  // const handleSuggestCategory = async () => {
+  //   const title = form.getValues('title');
+  //   const description = form.getValues('description');
+
+  //   if (!title || !description) {
+  //     showError("Por favor, preencha o título e a descrição para sugerir uma categoria.");
+  //     return;
+  //   }
+
+  //   setIsSuggestingCategory(true);
+  //   const toastId = showLoading("Sugerindo categoria...");
+
+  //   try {
+  //     const { data, error } = await supabase.functions.invoke('suggest-category', {
+  //       body: { title, description },
+  //     });
+
+  //     if (error) throw error;
+  //     if (data?.error) throw new Error(data.error);
+
+  //     const suggestedSlug = data.suggestedCategory;
+  //     if (suggestedSlug) {
+  //       // Encontra a categoria sugerida e seu caminho completo
+  //       const category = allCategories?.find(c => c.slug === suggestedSlug);
+  //       if (category) {
+  //         const path: string[] = [];
+  //         let currentSlug: string | null = category.slug;
+  //         while (currentSlug) {
+  //           path.unshift(currentSlug);
+  //           const parentCategory = allCategories?.find(c => c.slug === currentSlug && c.parent_slug);
+  //           currentSlug = parentCategory ? parentCategory.parent_slug : null;
+  //         }
+  //         setSelectedCategoryPath(path);
+  //         showSuccess(`Categoria sugerida: ${category.name}`);
+  //       } else {
+  //         showError("A categoria sugerida não foi encontrada na lista.");
+  //       }
+  //     } else {
+  //       showError("Não foi possível sugerir uma categoria.");
+  //     }
+  //   } catch (error) {
+  //     showError(error instanceof Error ? error.message : "Erro ao sugerir categoria.");
+  //   } finally {
+  //     dismissToast(toastId);
+  //     setIsSuggestingCategory(false);
+  //   }
+  // };
+
   async function onSubmit(values: z.infer<typeof adFormSchema>) {
     if (!user) {
       showError("Você precisa estar logado para criar um anúncio.");
@@ -261,13 +321,18 @@ const CreateAd = () => {
       console.log("CreateAd: All images processed. Final image URLs (relative paths):", finalImageUrls);
 
       // Campos padrão que não devem ir para metadata
-      const standardFields = ['title', 'description', 'price', 'images', 'latitude', 'longitude', 'category_slug'];
+      const standardFields = ['title', 'description', 'price', 'images', 'latitude', 'longitude', 'category_slug', 'tags']; // NOVO: Adicionado 'tags'
       const metadata: { [key: string]: any } = {};
       for (const key in values) {
         // Adiciona campos dinâmicos (que não são padrão) ao metadata
         if (!standardFields.includes(key) && values[key] !== undefined && values[key] !== null && values[key] !== '') {
           metadata[key] = values[key];
         }
+      }
+
+      // NOVO: Processa as tags para o metadata
+      if (values.tags) {
+        metadata.tags = values.tags.split(',').map(tag => tag.trim()).filter(Boolean);
       }
 
       console.log("CreateAd: Inserting advertisement into database with payload:", {
@@ -344,6 +409,25 @@ const CreateAd = () => {
     }
   }
 
+  // Add top-level loading check here
+  if (isLoadingCategories) {
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader>
+          <Skeleton className="h-8 w-1/2" />
+          <Skeleton className="h-4 w-3/4" />
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-24" />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="max-w-2xl mx-auto">
       <CardHeader>
@@ -407,13 +491,13 @@ const CreateAd = () => {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Descrição</FormLabel>
-                  <FormControl><Textarea placeholder="Descreva seu produto em detalhes..." className="resize-y min-h-[120px]" {...field} /></FormControl>
+                  <FormControl><Textarea placeholder="Descreva seu produto em detalhes..." className="resize-y min-h-[100px]" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             
-            {categoryConfig.hasPriceFilter !== false && (
+            {categoryConfig.hasPriceFilter === true && (
               <FormField
                 control={form.control}
                 name="price"
@@ -464,6 +548,45 @@ const CreateAd = () => {
                 )}
               />
             ))}
+
+            {/* REMOVIDO: Botão de Sugerir Categoria */}
+            {/*
+            <Button
+              type="button"
+              onClick={handleSuggestCategory}
+              disabled={isSuggestingCategory || !form.getValues('title') || !form.getValues('description')}
+              variant="outline"
+              className="w-full"
+            >
+              {isSuggestingCategory ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sugerindo...
+                </>
+              ) : (
+                <>
+                  <Lightbulb className="mr-2 h-4 w-4" /> Sugerir Categoria
+                </>
+              )}
+            </Button>
+            */}
+
+            {/* NOVO: Campo para Tags */}
+            <FormField
+              control={form.control}
+              name="tags"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tags / Palavras-Chave (Opcional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: usado, semi-novo, urgente, promoção" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Separe as tags por vírgula. Elas ajudam outros usuários a encontrar seu anúncio.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="space-y-4 border-t pt-6">
               <h3 className="text-lg font-medium">Localização</h3>

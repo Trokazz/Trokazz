@@ -16,22 +16,61 @@ import { safeFormatDate, getOptimizedImageUrl } from "@/lib/utils";
 import ShareButtons from "@/components/ShareButtons";
 import ErrorState from "@/components/ErrorState";
 import usePageMetadata from "@/hooks/usePageMetadata";
-// REMOVIDO: import AdSenseAd from "@/components/AdSenseAd";
+import { Category, Advertisement, UserLevelDetails } from "@/types/database"; // Import Category, Advertisement, UserLevelDetails
 
 const fetchAdDetails = async (id: string) => {
-  const { data, error } = await supabase
+  // First, fetch the advertisement and its profile
+  const { data: adData, error: adError } = await supabase
     .from("advertisements")
     .select(`
       *,
-      profiles ( id, full_name, phone, username, is_verified )
+      profiles (
+        id,
+        full_name,
+        phone,
+        username,
+        is_verified,
+        user_level,
+        userLevelDetails:user_levels ( * )
+      )
     `)
     .eq("id", id)
     .maybeSingle();
 
-  if (error) {
-    throw new Error(error.message);
+  if (adError) {
+    throw new Error(adError.message);
   }
-  return data;
+  if (!adData) {
+    return null; // Ad not found
+  }
+
+  let categoryDetails: Category | null = null;
+  if (adData.category_slug) {
+    const { data: categoryData, error: categoryError } = await supabase
+      .from("categories")
+      .select("*") // Select all fields for the category
+      .eq("slug", adData.category_slug)
+      .single();
+
+    if (categoryError) {
+      console.error("Error fetching category details:", categoryError);
+      // Don't throw, just log and proceed with null category
+    } else {
+      categoryDetails = categoryData as Category;
+    }
+  }
+
+  // Combine adData with categoryDetails and ensure profile structure matches Advertisement type
+  const adWithDetails: Advertisement = {
+    ...adData,
+    profiles: adData.profiles ? {
+      ...adData.profiles,
+      userLevelDetails: adData.profiles.userLevelDetails as unknown as UserLevelDetails | null,
+    } : null,
+    categories: categoryDetails, // Attach the fetched category details
+  };
+
+  return adWithDetails;
 };
 
 const AdDetails = () => {
@@ -112,6 +151,12 @@ const AdDetails = () => {
 
   const isOwner = user && ad.profiles && user.id === ad.profiles.id;
 
+  // Process custom fields
+  const categoryCustomFields = (ad.categories as Category | null)?.custom_fields;
+  const dynamicFields = (categoryCustomFields && typeof categoryCustomFields === 'object' && Array.isArray(categoryCustomFields.fields))
+    ? categoryCustomFields.fields
+    : [];
+
   return (
     <div className="max-w-4xl mx-auto">
       <Card className="overflow-hidden">
@@ -179,9 +224,26 @@ const AdDetails = () => {
                 <p className="text-muted-foreground whitespace-pre-wrap">{ad.description}</p>
               </div>
 
-              <ShareButtons title={ad.title} url={adUrl} />
+              {/* Display Dynamic Fields */}
+              {dynamicFields.length > 0 && ad.metadata && (
+                <div className="mt-6 border-t pt-4 space-y-2">
+                  <h3 className="font-semibold mb-2">Detalhes Adicionais</h3>
+                  {dynamicFields.map((field: any) => {
+                    const value = (ad.metadata as any)?.[field.name];
+                    if (value) {
+                      return (
+                        <div key={field.name} className="flex justify-between text-sm text-muted-foreground">
+                          <span className="font-medium">{field.label}:</span>
+                          <span>{value}</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+              )}
 
-              {/* REMOVIDO: AdSense Ad Unit for Ad Details Page */}
+              <ShareButtons title={ad.title} url={adUrl} />
 
             </CardContent>
             <div className="mt-6 border-t pt-4 space-y-2 text-sm text-muted-foreground">

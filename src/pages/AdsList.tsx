@@ -46,6 +46,7 @@ const fetchAds = async ({
   customFilters,
   userLocation,
   radiusKm,
+  tags, // NOVO: Adicionado tags ao fetchAds
 }: {
   categorySlug?: string;
   searchTerm?: string;
@@ -57,7 +58,9 @@ const fetchAds = async ({
   customFilters: Record<string, string>;
   userLocation: UserLocation | null;
   radiusKm: number;
+  tags?: string; // NOVO: Tipo para tags
 }) => {
+  console.log("fetchAds: Called with parameters:", { categorySlug, searchTerm, page, priceMin, priceMax, sortBy, sortOrder, customFilters, userLocation, radiusKm, tags }); // NEW LOG
   let query = supabase
     .from("advertisements")
     .select(`
@@ -85,8 +88,19 @@ const fetchAds = async ({
 
   // Apply custom filters
   for (const key in customFilters) {
-    if (customFilters[key]) {
+    if (customFilters[key]) { // Only add if value is not empty
       query = query.eq(`metadata->>${key}`, customFilters[key]);
+    }
+  }
+
+  // NOVO: Filtro por tags
+  if (tags) {
+    const tagArray = tags.split(',').map(tag => tag.trim()).filter(Boolean);
+    if (tagArray.length > 0) {
+      // Usa o operador '@>' para verificar se o array JSONB de tags contém todos os elementos do array fornecido
+      // Ou '?' para verificar se o array JSONB de tags contém qualquer um dos elementos
+      // Para uma busca mais flexível (qualquer tag), usaremos '?'
+      query = query.overlaps('metadata->tags', tagArray);
     }
   }
 
@@ -98,6 +112,7 @@ const fetchAds = async ({
 
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
+  console.log("fetchAds: Supabase query result count:", count); // NEW LOG
   return { ads: data as AdWithProfile[], count: count ?? 0 };
 };
 
@@ -111,12 +126,25 @@ const fetchUserFavoriteIds = async (userId: string | undefined) => {
 const fetchCategories = async () => {
   const { data, error } = await supabase.from("categories").select("slug, name, custom_fields").order("name");
   if (error) throw new Error(error.message);
-  console.log("fetchCategories: Raw data from Supabase:", data); // NOVO LOG AQUI
-  // Ensure custom_fields is always a parsed object
-  return data.map(cat => ({
-    ...cat,
-    custom_fields: cat.custom_fields ? (typeof cat.custom_fields === 'string' ? JSON.parse(cat.custom_fields) : cat.custom_fields) : null
-  }));
+  return data.map(cat => {
+    let hasPriceFilter = false; // Default to false
+    let fields: any[] = [];
+
+    if (cat.custom_fields && typeof cat.custom_fields === 'object' && cat.custom_fields !== null) {
+      const rawCustomFields = cat.custom_fields as { hasPriceFilter?: boolean; fields?: any[] };
+      if (rawCustomFields.hasPriceFilter === true) { // Only set to true if explicitly true
+        hasPriceFilter = true;
+      }
+      if (Array.isArray(rawCustomFields.fields)) {
+        fields = rawCustomFields.fields;
+      }
+    }
+    
+    return {
+      ...cat,
+      custom_fields: { hasPriceFilter, fields } // Ensure it's always an object with these properties
+    };
+  });
 };
 
 const AdGridSkeleton = ({ count = ADS_PER_PAGE }: { count?: number }) => (
@@ -140,14 +168,16 @@ const AdsList = () => {
   const currentSearchTerm = searchParams.get("q") || "";
 
   // Filter states
-  const [priceMin, setPriceMin] = useState<string>(searchParams.get("priceMin") || "");
-  const [priceMax, setPriceMax] = useState<string>(searchParams.get("priceMax") || "");
-  const [sortBy, setSortBy] = useState<string>(searchParams.get("sortBy") || "created_at");
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
-    (searchParams.get("sortOrder") as 'asc' | 'desc') || "desc"
-  );
+  const [priceMin, setPriceMin] = useState<string>("");
+  const [priceMax, setPriceMax] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("created_at");
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>("desc");
   const [customFilters, setCustomFilters] = useState<Record<string, string>>({});
-  const [selectedCategoryDetails, setSelectedCategoryDetails] = useState<Category | null>(null);
+  const [tagsFilter, setTagsFilter] = useState<string>(""); // NOVO: Estado para o filtro de tags
+  
+  // Define effectiveCategoryConfig here, and update it in useEffect
+  const [effectiveCategoryConfig, setEffectiveCategoryConfig] = useState<{ hasPriceFilter: boolean; fields: any[] }>({ hasPriceFilter: false, fields: [] });
+  const [currentCategoryName, setCurrentCategoryName] = useState<string | null>(null); // For page title
 
   const { data: allCategories, isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ["categories"],
@@ -155,42 +185,64 @@ const AdsList = () => {
   });
 
   useEffect(() => {
-    console.log("AdsList: useEffect triggered for categorySlug or allCategories change.");
+    console.log("AdsList: useEffect for categorySlug/allCategories/searchParams fired.");
+    console.log("AdsList: Current searchParams:", Object.fromEntries(searchParams.entries()));
+    
+    // Initialize filter states directly from searchParams, with fallbacks
+    setPriceMin(searchParams.get("priceMin") || "");
+    setPriceMax(searchParams.get("priceMax") || "");
+    setSortBy(searchParams.get("sortBy") || "created_at");
+    setSortOrder((searchParams.get("sortOrder") as 'asc' | 'desc') || "desc");
+    setTagsFilter(searchParams.get("tags") || ""); // NOVO: Inicializa tagsFilter
+    
+    let newEffectiveCategoryConfig: { hasPriceFilter: boolean; fields: any[] } = { hasPriceFilter: false, fields: [] };
+    let newCurrentCategoryName: string | null = null;
+
     if (categorySlug && allCategories) {
-      const category = allCategories.find(cat => cat.slug === categorySlug);
-      
-      // Ensure custom_fields is always an object, even if null in DB
-      // And ensure hasPriceFilter defaults to true if not explicitly set to false
-      const resolvedCustomFields = { 
-        hasPriceFilter: true, // Default to true
-        fields: [],
-        ...(category?.custom_fields || {}) // Merge existing custom_fields, if any
-      };
+      const foundCategory = allCategories.find(cat => cat.slug === categorySlug);
+      console.log("AdsList: Current category found:", foundCategory);
+      if (foundCategory) {
+        // Ensure newEffectiveCategoryConfig is always a well-formed object
+        const rawCustomFields = (typeof foundCategory.custom_fields === 'object' && foundCategory.custom_fields !== null)
+          ? foundCategory.custom_fields
+          : {};
+        
+        let hasPriceFilter = false; // Default to false
+        let fields: any[] = [];
 
-      console.log("AdsList: Category found:", category);
-      console.log("AdsList: Raw custom_fields from DB (inside useEffect):", category?.custom_fields); // Add this log
-      console.log("AdsList: Resolved Custom Fields (after merge):", resolvedCustomFields); // Add this log
-      
-      setSelectedCategoryDetails({ ...category, custom_fields: resolvedCustomFields } || null);
+        if (rawCustomFields.hasPriceFilter === true) { // Only set to true if explicitly true
+          hasPriceFilter = true;
+        }
+        if (Array.isArray(rawCustomFields.fields)) {
+          fields = rawCustomFields.fields;
+        }
 
-      if (resolvedCustomFields.fields) {
-        const initialCustomFilters: Record<string, string> = {};
-        (resolvedCustomFields.fields || []).forEach((field: any) => {
-          initialCustomFilters[field.name] = searchParams.get(field.name) || "";
-        });
-        setCustomFilters(initialCustomFilters);
+        newEffectiveCategoryConfig = { hasPriceFilter, fields };
+        newCurrentCategoryName = foundCategory.name;
       } else {
-        setCustomFilters({});
+        console.log("AdsList: No category found for slug:", categorySlug);
       }
     } else {
-      console.log("AdsList: No categorySlug or allCategories not loaded. Resetting filters.");
-      setSelectedCategoryDetails(null);
-      setCustomFilters({});
+      console.log("AdsList: No categorySlug or allCategories not loaded. Using default category config.");
     }
-  }, [categorySlug, allCategories, searchParams]);
+    setEffectiveCategoryConfig(newEffectiveCategoryConfig); // Update the state here
+    setCurrentCategoryName(newCurrentCategoryName); // Update category name for title
+    console.log("AdsList: newEffectiveCategoryConfig after update:", newEffectiveCategoryConfig); // ADDED LOG
+    console.log("AdsList: effectiveCategoryConfig state after update:", newEffectiveCategoryConfig); // ADDED LOG
+
+    const initialCustomFilters: Record<string, string> = {};
+    (newEffectiveCategoryConfig.fields || []).forEach((field: any) => { 
+      const paramValue = searchParams.get(field.name);
+      if (paramValue !== null) {
+        initialCustomFilters[field.name] = paramValue;
+      }
+    });
+    setCustomFilters(initialCustomFilters);
+    console.log("AdsList: initialCustomFilters after update:", initialCustomFilters); // ADDED LOG
+  }, [categorySlug, allCategories, searchParams]); // Dependencies
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["adsList", categorySlug, currentSearchTerm, currentPage, priceMin, priceMax, sortBy, sortOrder, customFilters],
+    queryKey: ["adsList", categorySlug, currentSearchTerm, currentPage, priceMin, priceMax, sortBy, sortOrder, customFilters, tagsFilter], // NOVO: Adicionado tagsFilter
     queryFn: () => fetchAds({
       categorySlug,
       searchTerm: currentSearchTerm,
@@ -202,6 +254,7 @@ const AdsList = () => {
       customFilters,
       userLocation: null, // Not directly integrated here for now
       radiusKm: 0, // Not directly integrated here for now
+      tags: tagsFilter, // NOVO: Passa tagsFilter para fetchAds
     }),
   });
 
@@ -214,30 +267,40 @@ const AdsList = () => {
   const totalPages = data?.count ? Math.ceil(data.count / ADS_PER_PAGE) : 0;
 
   const handleApplyFilters = () => {
+    console.log("handleApplyFilters: Applying filters with current state:", { priceMin, priceMax, sortBy, sortOrder, customFilters, tagsFilter }); // NEW LOG
     const newSearchParams = new URLSearchParams();
     if (currentSearchTerm) newSearchParams.set("q", currentSearchTerm);
     if (priceMin) newSearchParams.set("priceMin", priceMin);
     if (priceMax) newSearchParams.set("priceMax", priceMax);
     if (sortBy) newSearchParams.set("sortBy", sortBy);
     if (sortOrder) newSearchParams.set("sortOrder", sortOrder);
+    if (tagsFilter) newSearchParams.set("tags", tagsFilter); // NOVO: Adiciona tagsFilter aos searchParams
+    
+    // Add custom filters
     for (const key in customFilters) {
-      if (customFilters[key]) newSearchParams.set(key, customFilters[key]);
+      if (customFilters[key]) { // Only add if value is not empty
+        newSearchParams.set(key, customFilters[key]);
+      }
     }
+
     newSearchParams.set("page", "1"); // Reset to first page on filter apply
+    console.log("handleApplyFilters: New searchParams to set:", Object.fromEntries(newSearchParams.entries())); // NEW LOG
     setSearchParams(newSearchParams);
   };
 
   const handleClearFilters = () => {
+    console.log("handleClearFilters: Clearing all filters."); // NEW LOG
     setPriceMin("");
     setPriceMax("");
     setSortBy("created_at");
     setSortOrder("desc");
-    setCustomFilters({});
+    setCustomFilters({}); // Clear custom filters
+    setTagsFilter(""); // NOVO: Limpa o filtro de tags
     setSearchParams({}); // Clear all search params
   };
 
-  const pageTitle = categorySlug ? `Anúncios em ${selectedCategoryDetails?.name || categorySlug.replace(/-/g, ' ')}` : (currentSearchTerm ? `Resultados para "${currentSearchTerm}"` : "Todos os Anúncios");
-  const pageDescription = categorySlug ? `Encontre anúncios na categoria ${selectedCategoryDetails?.name || categorySlug.replace(/-/g, ' ')} no Trokazz.` : (currentSearchTerm ? `Veja os resultados da busca por "${currentSearchTerm}" no Trokazz.` : "Explore todos os anúncios disponíveis no Trokazz.");
+  const pageTitle = categorySlug ? `Anúncios em ${currentCategoryName || categorySlug.replace(/-/g, ' ')}` : (currentSearchTerm ? `Resultados para "${currentSearchTerm}"` : "Todos os Anúncios");
+  const pageDescription = categorySlug ? `Encontre anúncios na categoria ${currentCategoryName || categorySlug.replace(/-/g, ' ')} no Trokazz.` : (currentSearchTerm ? `Veja os resultados da busca por "${currentSearchTerm}" no Trokazz.` : "Explore todos os anúncios disponíveis no Trokazz.");
 
   usePageMetadata({
     title: `${pageTitle} - Trokazz`,
@@ -253,7 +316,7 @@ const AdsList = () => {
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold capitalize">
-        {categorySlug ? selectedCategoryDetails?.name || categorySlug.replace(/-/g, ' ') : (currentSearchTerm ? `Busca por "${currentSearchTerm}"` : "Todos os Anúncios")}
+        {categorySlug ? currentCategoryName || categorySlug.replace(/-/g, ' ') : (currentSearchTerm ? `Busca por "${currentSearchTerm}"` : "Todos os Anúncios")}
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -267,8 +330,8 @@ const AdsList = () => {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Price Filter */}
-            {console.log("AdsList: Rendering Price Filter. hasPriceFilter:", selectedCategoryDetails?.custom_fields?.hasPriceFilter)}
-            {selectedCategoryDetails?.custom_fields?.hasPriceFilter !== false && (
+            {console.log("AdsList: Rendering price filter. hasPriceFilter:", effectiveCategoryConfig.hasPriceFilter)}
+            {effectiveCategoryConfig.hasPriceFilter === true && (
               <div className="space-y-2">
                 <Label htmlFor="price-min">Preço (R$)</Label>
                 <div className="flex gap-2">
@@ -291,35 +354,52 @@ const AdsList = () => {
             )}
 
             {/* Custom Fields Filters */}
-            {selectedCategoryDetails?.custom_fields?.fields?.map((field: any) => (
-              <div key={field.name} className="space-y-2">
-                <Label htmlFor={`custom-filter-${field.name}`}>{field.label}</Label>
-                {field.type === 'select' ? (
-                  <Select
-                    value={customFilters[field.name] || ""}
-                    onValueChange={(value) => setCustomFilters(prev => ({ ...prev, [field.name]: value }))}
-                  >
-                    <SelectTrigger id={`custom-filter-${field.name}`}>
-                      <SelectValue placeholder={`Selecione ${field.label.toLowerCase()}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
-                      {field.options.map((option: string) => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    id={`custom-filter-${field.name}`}
-                    type={field.type}
-                    placeholder={`Buscar por ${field.label.toLowerCase()}`}
-                    value={customFilters[field.name] || ""}
-                    onChange={(e) => setCustomFilters(prev => ({ ...prev, [field.name]: e.target.value }))}
-                  />
-                )}
-              </div>
-            ))}
+            {isLoadingCategories ? (
+              <Skeleton className="h-24 w-full" />
+            ) : (
+              effectiveCategoryConfig.fields?.map((field: any) => (
+                <div key={field.name} className="space-y-2">
+                  <Label htmlFor={`custom-filter-${field.name}`}>{field.label}</Label>
+                  {field.type === 'select' ? (
+                    <Select
+                      value={customFilters[field.name] || ""}
+                      onValueChange={(value) => setCustomFilters(prev => ({ ...prev, [field.name]: value }))}
+                    >
+                      <SelectTrigger id={`custom-filter-${field.name}`}>
+                        <SelectValue placeholder={`Selecione ${field.label.toLowerCase()}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todos</SelectItem>
+                        {field.options.map((option: string) => (
+                          <SelectItem key={option} value={option}>{option}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id={`custom-filter-${field.name}`}
+                      type={field.type}
+                      placeholder={`Buscar por ${field.label.toLowerCase()}`}
+                      value={customFilters[field.name] || ""}
+                      onChange={(e) => setCustomFilters(prev => ({ ...prev, [field.name]: e.target.value }))}
+                    />
+                  )}
+                </div>
+              ))
+            )}
+
+            {/* NOVO: Filtro por Tags */}
+            <div className="space-y-2">
+              <Label htmlFor="tags-filter">Tags / Palavras-Chave</Label>
+              <Input
+                id="tags-filter"
+                type="text"
+                placeholder="Ex: usado, urgente, promoção"
+                value={tagsFilter}
+                onChange={(e) => setTagsFilter(e.target.value)}
+              />
+              <CardDescription className="text-xs">Separe as tags por vírgula.</CardDescription>
+            </div>
 
             {/* Sort By */}
             <div className="space-y-2">
@@ -346,50 +426,50 @@ const AdsList = () => {
                 <SelectContent>
                   <SelectItem value="desc">Decrescente</SelectItem>
                   <SelectItem value="asc">Crescente</SelectItem>
-                </SelectContent>
-              </Select>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={handleApplyFilters} className="w-full">
+                    Aplicar Filtros
+                  </Button>
+                  <Button variant="outline" onClick={handleClearFilters} className="w-full">
+                    Limpar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Ads Grid */}
+            <div className="md:col-span-3 space-y-6">
+              <section>
+                {isLoading ? (
+                  <AdGridSkeleton />
+                ) : data?.ads.length === 0 ? (
+                  <div className="text-center py-10">
+                    <h3 className="text-xl font-semibold">Nenhum anúncio encontrado</h3>
+                    <p className="text-muted-foreground mt-2">
+                      {categorySlug ? `Não há anúncios na categoria "${currentCategoryName || categorySlug.replace(/-/g, ' ')}" com esses filtros.` : "Nenhum anúncio corresponde à sua busca ou filtros."}
+                    </p>
+                    <Link to="/novo-anuncio" className="text-primary hover:underline mt-4 block">
+                      Publique seu anúncio grátis!
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {data?.ads.map((ad) => (
+                      <AdCard key={ad.id} ad={ad} isInitiallyFavorited={favoriteIds?.includes(ad.id)} />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <PaginationControls currentPage={currentPage} totalPages={totalPages} />
             </div>
-
-            <div className="flex gap-2">
-              <Button onClick={handleApplyFilters} className="w-full">
-                Aplicar Filtros
-              </Button>
-              <Button variant="outline" onClick={handleClearFilters} className="w-full">
-                Limpar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Ads Grid */}
-        <div className="md:col-span-3 space-y-6">
-          <section>
-            {isLoading ? (
-              <AdGridSkeleton />
-            ) : data?.ads.length === 0 ? (
-              <div className="text-center py-10">
-                <h3 className="text-xl font-semibold">Nenhum anúncio encontrado</h3>
-                <p className="text-muted-foreground mt-2">
-                  {categorySlug ? `Não há anúncios na categoria "${selectedCategoryDetails?.name || categorySlug.replace(/-/g, ' ')}" com esses filtros.` : "Nenhum anúncio corresponde à sua busca ou filtros."}
-                </p>
-                <Link to="/novo-anuncio" className="text-primary hover:underline mt-4 block">
-                  Publique seu anúncio grátis!
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {data?.ads.map((ad) => (
-                  <AdCard key={ad.id} ad={ad} isInitiallyFavorited={favoriteIds?.includes(ad.id)} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <PaginationControls currentPage={currentPage} totalPages={totalPages} />
+          </div>
         </div>
-      </div>
-    </div>
-  );
-};
+      );
+    };
 
 export default AdsList;
