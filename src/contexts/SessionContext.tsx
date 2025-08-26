@@ -17,23 +17,49 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Error getting session:", error);
-        showError("Erro ao carregar sessão: " + error.message);
+    const handleAuthStateChange = async (currentSession: Session | null) => {
+      setSession(currentSession);
+      setUser(currentSession?.user || null);
+
+      if (currentSession?.user) {
+        // Fetch user profile status
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('status')
+          .eq('id', currentSession.user.id)
+          .single();
+
+        if (profileError && profileError.code !== 'PGRST116') { // PGRST116 means no row found
+          console.error("Error fetching user profile status:", profileError);
+          showError("Erro ao verificar status da conta: " + profileError.message);
+          setLoading(false);
+          return;
+        }
+
+        if (profile?.status === 'suspended') {
+          console.warn(`User ${currentSession.user.id} is suspended. Signing out.`);
+          await supabase.auth.signOut();
+          showError("Sua conta foi suspensa. Por favor, entre em contato com o suporte.");
+          setSession(null);
+          setUser(null);
+        }
       }
-      setSession(session);
-      setUser(session?.user || null);
       setLoading(false);
     };
 
-    getSession();
+    const getInitialSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error("Error getting initial session:", error);
+        showError("Erro ao carregar sessão: " + error.message);
+      }
+      await handleAuthStateChange(session);
+    };
+
+    getInitialSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user || null);
-      setLoading(false);
+      handleAuthStateChange(session);
     });
 
     return () => subscription.unsubscribe();
