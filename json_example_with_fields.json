@@ -1,0 +1,17 @@
+{
+  "hasPriceFilter": false,
+  "fields": [
+    {
+      "name": "tipo_vaga",
+      "label": "Tipo de Vaga",
+      "type": "select",
+      "options": ["Tempo Integral", "Meio Período", "Estágio", "Freelancer"]
+    },
+    {
+      "name": "nivel_experiencia",
+      "label": "Nível de Experiência",
+      "type": "select",
+      "options": ["Júnior", "Pleno", "Sênior"]
+    }
+  ]
+}
