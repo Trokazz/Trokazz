@@ -1,149 +1,89 @@
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import { lazy } from "react";
-import { Providers } from "./components/Providers";
-import Root from "./components/Root";
-import ProtectedRoute from "./components/ProtectedRoute";
-import AdminProtectedRoute from "./components/admin/AdminProtectedRoute";
+"use client";
 
-// Lazy load pages
-const Index = lazy(() => import("./pages/Index"));
-const AuthTabs = lazy(() => import("./pages/AuthTabs"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const ProfileMenuPage = lazy(() => import("./pages/ProfileMenuPage")); // NEW: Profile Menu Page
-const EditProfilePage = lazy(() => import("./pages/EditProfilePage")); // NEW: Edit Profile Page
-const MyAdsPage = lazy(() => import("./pages/MyAdsPage")); // NEW: My Ads Page
-const OffersPage = lazy(() => import("./pages/OffersPage")); // NEW: Offers Page
-const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage")); // NEW: Analytics Page
-const CreditTransactionsPage = lazy(() => import("./pages/CreditTransactionsPage")); // NEW: Credit Transactions Page
-const NotificationsPage = lazy(() => import("./pages/NotificationsPage")); // NEW: Notifications Page
-const FavoritesPage = lazy(() => import("./pages/FavoritesPage")); // NEW: Favorites Page
-const VerificationPage = lazy(() => import("./pages/VerificationPage")); // NEW: Verification Page
-const UserSupportTicketsPage = lazy(() => import("./pages/UserSupportTicketsPage")); // NEW: User Support Tickets Page
-const MyReviewsPage = lazy(() => import("./pages/MyReviewsPage")); // NEW: My Reviews Page
-const PublicProfilePage = lazy(() => import("./pages/PublicProfilePage")); // Importar PublicProfilePage
+import { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
+import { SessionContextProvider } from '@/contexts/SessionContext';
 
-const CreateAd = lazy(() => import("./pages/CreateAd"));
-const EditMyAd = lazy(() => import("./pages/EditMyAd"));
-const AdDetails = lazy(() => import("./pages/AdDetails"));
-const AdsList = lazy(() => import("./pages/AdsList")); // Renamed from CategoryPage for clarity
-const WantedAdsList = lazy(() => import("./pages/WantedAdsList"));
-const CreateWantedAd = lazy(() => import("./pages/CreateWantedAd"));
-const WantedAdDetails = lazy(() => import("./pages/WantedAdDetails"));
-const ServicesList = lazy(() => import("./pages/ServicesList"));
-const CreateServiceAd = lazy(() => import("./pages/CreateServiceAd"));
-const ServiceDetails = lazy(() => import("./pages/ServiceDetails"));
-const Conversation = lazy(() => import("./pages/Conversation"));
-const UserTicketDetails = lazy(() => import("./pages/UserTicketDetails"));
-const Contact = lazy(() => import("./pages/Contact"));
-const FAQ = lazy(() => import("./pages/FAQ"));
-const AboutUs = lazy(() => import("./pages/AboutUs"));
-const TermsOfService = lazy(() => import("./pages/TermsOfService"));
-const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
-const NotFound = lazy(() => import("./pages/NotFound"));
-const Inbox = lazy(() => import("./pages/Inbox")); // Importar Inbox
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import Index from '@/pages/Index';
+import AboutPage from '@/pages/AboutPage';
+import ContactPage from '@/pages/ContactPage';
+import TermsPage from '@/pages/TermsPage';
+import PrivacyPage from '@/pages/PrivacyPage';
+import AuthPage from '@/pages/AuthPage'; // Importar a nova AuthPage
+import ProfilePage from '@/pages/ProfilePage';
+import CreateAdPage from '@/pages/CreateAdPage';
+import AdDetailsPage from '@/pages/AdDetailsPage';
+import InboxPage from '@/pages/InboxPage';
+import ChatPage from '@/pages/ChatPage';
+import NotificationsPage from '@/pages/NotificationsPage';
+import VerificationPage from '@/pages/VerificationPage';
+import SupportPage from '@/pages/SupportPage';
+import UserTicketDetails from '@/pages/UserTicketDetails';
+import CreditTransactionsPage from '@/pages/CreditTransactionsPage';
+import AdminDashboard from '@/pages/admin/AdminDashboard';
+import ManageAds from '@/pages/admin/ManageAds';
+import ManageUsers from '@/pages/admin/ManageUsers';
+import ModerationPage from '@/pages/admin/ModerationPage';
+import ManageSupportTickets from '@/pages/admin/ManageSupportTickets';
+import AdminTicketDetails from '@/pages/admin/TicketDetails';
+import AnalyticsPage from '@/pages/admin/AnalyticsPage';
 
-// Admin Pages
-const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
-const ManageUsers = lazy(() => import("./pages/admin/ManageUsers"));
-const UserDetails = lazy(() => import("./pages/admin/UserDetails"));
-const ManageAds = lazy(() => import("./pages/admin/ManageAds"));
-const EditAd = lazy(() => import("./pages/admin/EditAd"));
-const ModerationCenter = lazy(() => import("./pages/admin/ModerationCenter"));
-const ManageSupportTickets = lazy(() => import("./pages/admin/ManageSupportTickets"));
-const TicketDetails = lazy(() => import("./pages/admin/TicketDetails"));
-const SiteSettings = lazy(() => import("./pages/admin/SiteSettings"));
-const ManageCategories = lazy(() => import("./pages/admin/ManageCategories"));
-const ManageBanners = lazy(() => import("./pages/admin/ManageBanners"));
-const ManageCreditPackages = lazy(() => import("./pages/admin/ManageCreditPackages"));
-const ManagePromoCodes = lazy(() => import("./pages/admin/ManagePromoCodes"));
-const SystemLogs = lazy(() => import("./pages/admin/SystemLogs"));
-const InvestorDashboard = lazy(() => import("./pages/admin/InvestorDashboard"));
-const Insights = lazy(() => import("./pages/admin/Insights"));
-const SearchAnalyticsPage = lazy(() => import("./pages/admin/SearchAnalytics"));
-const ManageUserLevels = lazy(() => import("./pages/admin/ManageUserLevels"));
+const queryClient = new QueryClient();
 
+function App() {
+  const [showNearbyAds, setShowNearbyAds] = useState(false);
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <Root />,
-    children: [
-      { index: true, element: <Index /> },
-      { path: "/auth", element: <AuthTabs /> },
-      { path: "/forgot-password", element: <ForgotPassword /> },
-      { path: "/anuncios", element: <AdsList /> }, // General ads list
-      { path: "/anuncios/categoria/:slug", element: <AdsList /> },
-      { path: "/anuncio/:id", element: <AdDetails /> },
-      { path: "/procurados", element: <WantedAdsList /> },
-      { path: "/procura/novo", element: <CreateWantedAd /> },
-      { path: "/procura/:id", element: <WantedAdDetails /> },
-      { path: "/servicos", element: <ServicesList /> },
-      { path: "/servicos/novo", element: <CreateServiceAd /> },
-      { path: "/servico/:id", element: <ServiceDetails /> },
-      { path: "/contato", element: <Contact /> },
-      { path: "/faq", element: <FAQ /> },
-      { path: "/about-us", element: <AboutUs /> },
-      { path: "/terms-of-service", element: <TermsOfService /> },
-      { path: "/privacy-policy", element: <PrivacyPolicy /> },
-      { 
-        path: "/loja/:username", 
-        element: <PublicProfilePage />, 
-        /* Adicionado a rota para o perfil público aqui */ 
-      },
-      {
-        element: <ProtectedRoute />,
-        children: [
-          { path: "/perfil", element: <ProfileMenuPage /> }, // NEW: Main profile menu
-          { path: "/perfil/editar", element: <EditProfilePage /> }, // NEW: Edit Profile Page
-          { path: "/perfil/meus-anuncios", element: <MyAdsPage /> }, // NEW: My Ads Page
-          { path: "/perfil/minhas-ofertas", element: <OffersPage /> }, // NEW: Offers Page
-          { path: "/perfil/desempenho", element: <AnalyticsPage /> }, // NEW: Analytics Page
-          { path: "/perfil/historico-transacoes", element: <CreditTransactionsPage /> }, // NEW: Credit Transactions Page
-          { path: "/perfil/notificacoes", element: <NotificationsPage /> }, // NEW: Notifications Page
-          { path: "/perfil/favoritos", element: <FavoritesPage /> }, // NEW: Favorites Page
-          { path: "/perfil/verificacao", element: <VerificationPage /> }, // NEW: Verification Page
-          { path: "/perfil/meus-tickets", element: <UserSupportTicketsPage /> }, // NEW: User Support Tickets Page
-          { path: "/perfil/meus-comentarios", element: <MyReviewsPage /> }, // NEW: My Reviews Page
-          { path: "/perfil/anuncio/:id/editar", element: <EditMyAd /> },
-          { path: "/perfil/support-tickets/:ticketId", element: <UserTicketDetails /> },
-          { path: "/novo-anuncio", element: <CreateAd /> },
-          { path: "/chat/:conversationId", element: <Conversation /> },
-          { path: "/inbox", element: <Inbox /> }, {/* Adicionado a rota /inbox aqui */}
-        ],
-      },
-      { path: "*", element: <NotFound /> },
-    ],
-  },
-  {
-    path: "/admin",
-    element: <AdminProtectedRoute />,
-    children: [
-      { index: true, element: <AdminDashboard /> },
-      { path: "users", element: <ManageUsers /> },
-      { path: "users/:id", element: <UserDetails /> },
-      { path: "ads", element: <ManageAds /> },
-      { path: "ads/:id/edit", element: <EditAd /> },
-      { path: "moderation-center", element: <ModerationCenter /> },
-      { path: "support-tickets", element: <ManageSupportTickets /> },
-      { path: "support-tickets/:ticketId", element: <TicketDetails /> },
-      { path: "settings", element: <SiteSettings /> },
-      { path: "categories", element: <ManageCategories /> },
-      { path: "banners", element: <ManageBanners /> },
-      { path: "credits", element: <ManageCreditPackages /> },
-      { path: "promo-codes", element: <ManagePromoCodes /> },
-      { path: "system-logs", element: <SystemLogs /> },
-      { path: "investor-dashboard", element: <InvestorDashboard /> },
-      { path: "insights", element: <Insights /> },
-      { path: "search-analytics", element: <SearchAnalyticsPage /> },
-      { path: "user-levels", element: <ManageUserLevels /> },
-    ],
-  },
-]);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SessionContextProvider>
+        <Router>
+          <Toaster />
+          <div className="flex flex-col min-h-screen">
+            <Header showNearbyAds={showNearbyAds} setShowNearbyAds={setShowNearbyAds} />
+            <main className="flex-grow">
+              <Routes>
+                <Route path="/" element={<Index showNearbyAds={showNearbyAds} setShowNearbyAds={setShowNearbyAds} />} />
+                <Route path="/sobre" element={<AboutPage />} />
+                <Route path="/contato" element={<ContactPage />} />
+                <Route path="/termos" element={<TermsPage />} />
+                <Route path="/privacidade" element={<PrivacyPage />} />
+                <Route path="/auth" element={<AuthPage />} /> {/* Nova rota de autenticação */}
+                {/* Redirecionar rotas antigas para a nova AuthPage */}
+                <Route path="/login" element={<AuthPage />} />
+                <Route path="/register" element={<AuthPage />} />
+                <Route path="/perfil" element={<ProfilePage />} />
+                <Route path="/criar-anuncio" element={<CreateAdPage />} />
+                <Route path="/anuncio/:id" element={<AdDetailsPage />} />
+                <Route path="/inbox" element={<InboxPage />} />
+                <Route path="/chat/:conversationId" element={<ChatPage />} />
+                <Route path="/notificacoes" element={<NotificationsPage />} />
+                <Route path="/verificacao" element={<VerificationPage />} />
+                <Route path="/suporte" element={<SupportPage />} />
+                <Route path="/meus-tickets/:ticketId" element={<UserTicketDetails />} />
+                <Route path="/transacoes-credito" element={<CreditTransactionsPage />} />
 
-const App = () => (
-  <Providers>
-    <RouterProvider router={router} />
-  </Providers>
-);
+                {/* Rotas de Admin */}
+                <Route path="/admin" element={<Outlet />}>
+                  <Route path="dashboard" element={<AdminDashboard />} />
+                  <Route path="anuncios" element={<ManageAds />} />
+                  <Route path="usuarios" element={<ManageUsers />} />
+                  <Route path="moderacao" element={<ModerationPage />} />
+                  <Route path="support-tickets" element={<ManageSupportTickets />} />
+                  <Route path="support-tickets/:ticketId" element={<AdminTicketDetails />} />
+                  <Route path="analytics" element={<AnalyticsPage />} />
+                </Route>
+              </Routes>
+            </main>
+            <Footer />
+          </div>
+        </Router>
+      </SessionContextProvider>
+    </QueryClientProvider>
+  );
+}
 
 export default App;
