@@ -15,7 +15,7 @@ import useDebounce from "@/hooks/useDebounce";
 import SearchWithAutocomplete from "@/components/SearchWithAutocomplete";
 import HomeBannerCarousel from "@/components/HomeBannerCarousel";
 import { useInView } from 'react-intersection-observer';
-import { useUserLocation } from '@/utils/geolocation';
+// Removido: import { useUserLocation } from '@/utils/geolocation';
 
 interface AdFilters {
   category: string | null;
@@ -132,7 +132,7 @@ const Index = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { ref, inView } = useInView();
-  const { city: detectedCity, state: detectedState, neighborhood: detectedNeighborhood, isLoadingLocation } = useUserLocation();
+  // Removido: const { city: detectedCity, state: detectedState, neighborhood: detectedNeighborhood, isLoadingLocation } = useUserLocation();
 
   const { data: priceSettings, isLoading: isLoadingPriceSettings } = useQuery({
     queryKey: ['priceRangeSettings'],
@@ -221,6 +221,8 @@ const Index = () => {
     });
   }, [searchParams, defaultMinPrice, defaultMaxPrice]);
 
+  // Removido: useEffect para definir localização detectada
+  /*
   useEffect(() => {
     if (!isLoadingLocation && detectedCity && !searchParams.get('locationCity')) {
       setFilters(prevFilters => ({
@@ -236,6 +238,7 @@ const Index = () => {
       navigate(`/?${newSearchParams.toString()}`, { replace: true });
     }
   }, [isLoadingLocation, detectedCity, detectedState, detectedNeighborhood, searchParams, navigate]);
+  */
 
   useEffect(() => {
     const currentUrlSearchParam = searchParams.get('q') || '';

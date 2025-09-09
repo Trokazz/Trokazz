@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import { UserAdListItem } from "@/components/UserAdListItem";
 import { Skeleton } from "@/components/ui/skeleton";
-import MobilePageHeader from "@/components/MobilePageHeader";
+// Removido: import MobilePageHeader from "@/components/MobilePageHeader";
 import { PlusCircle } from "lucide-react"; // Removed Package2 for empty state icon
 import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/utils/formatters"; // Importando formatPrice
@@ -30,7 +30,7 @@ const MyAdsPage = () => {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <MobilePageHeader title="Meus Anúncios" />
+      {/* Removido: <MobilePageHeader title="Meus Anúncios" /> */}
       <main className="flex-1 p-4 space-y-4">
         <Button asChild className="w-full bg-accent hover:bg-accent/90">
           <Link to="/sell">

@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { registerServiceWorker, subscribeUserToPush, unsubscribeUserFromPush } from "@/utils/pushNotifications"; // Import push notification utilities
+import { useIsMobile } from '@/hooks/use-mobile'; // Import useIsMobile
 
 // Lazy-loaded components for desktop tabs
 const LazyUserMyAdsPage = React.lazy(() => import('@/components/lazy/LazyUserMyAdsPage'));
@@ -122,6 +123,7 @@ const UserProfilePage = () => {
   const [searchParams, setSearchParams] = useSearchParams(); // Initialize useSearchParams
   const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [isCheckingPushStatus, setIsCheckingPushStatus] = useState(true);
+  const isMobile = useIsMobile(); // Use the hook here
 
   const { data: profile, isLoading: isLoadingProfile, error: profileError } = useQuery({
     queryKey: ['profile', user?.id],
@@ -274,59 +276,283 @@ const UserProfilePage = () => {
   return (
     <>
       {/* Mobile View */}
-      <div className="md:hidden flex flex-col flex-1 bg-background pb-16">
-        <header className="bg-primary text-primary-foreground p-4 pt-6 text-center relative rounded-b-3xl">
-          {/* Botão de voltar removido daqui */}
-          <h1 className="text-xl font-bold">Perfil</h1>
-          <div className="flex flex-col items-center text-center space-y-2 mt-4 pb-4">
-            <Avatar className="w-20 h-20 border-2 border-white">
+      {isMobile && (
+        <div className="flex flex-col flex-1 bg-background pb-16">
+          <header className="bg-primary text-primary-foreground p-4 pt-6 text-center relative rounded-b-3xl">
+            <h1 className="text-xl font-bold">Perfil</h1>
+            <div className="flex flex-col items-center text-center space-y-2 mt-4 pb-4">
+              <Avatar className="w-20 h-20 border-2 border-white">
+                <AvatarImage src={profile?.avatar_url || "/placeholder.svg"} alt={profile?.full_name || "User"} loading="lazy" />
+                <AvatarFallback>{profile?.full_name?.charAt(0) || 'U'}</AvatarFallback>
+              </Avatar>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold">{profile?.full_name}</h2>
+                {profile?.is_verified && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center justify-center">
+                          <BadgeCheck className="h-5 w-5 text-green-500" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Perfil Verificado</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-lg font-semibold">
+                <DollarSign className="h-5 w-5 text-yellow-400" />
+                <span>{userCredits} Créditos</span>
+              </div>
+              {userBadges && userBadges.length > 0 && (
+                <BadgeDisplay badges={userBadges} className="mt-2" />
+              )}
+            </div>
+          </header>
+
+          <main className="p-4 flex-1">
+            {needsProfessionalSetup && (
+              <Card className="mb-4 border-l-4 border-accent bg-accent/10 text-accent-foreground">
+                <CardHeader className="flex flex-row items-center gap-3 p-4">
+                  <Briefcase className="h-6 w-6" />
+                  <CardTitle className="text-lg">Complete seu Perfil Profissional!</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <p className="text-sm mb-3">
+                    Para oferecer seus serviços e aparecer nas buscas, precisamos de mais algumas informações.
+                  </p>
+                  <Button asChild className="w-full bg-accent hover:bg-accent/90 text-white">
+                    <Link to="/onboarding/professional-setup">Configurar Agora</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="flex gap-3 mb-4"> {/* Changed to flex for side-by-side buttons */}
+              <Button asChild className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-full h-12">
+                <Link to="/redeem" className="flex items-center justify-center gap-2">
+                  <Ticket className="h-5 w-5" />
+                  <span className="font-medium">Resgatar Voucher</span>
+                </Link>
+              </Button>
+              <Button asChild className="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full h-12">
+                <Link to="/buy-credits" className="flex items-center justify-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  <span className="font-medium">Comprar Créditos</span>
+                </Link>
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <Link to="/profile/my-ads">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <List className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Meus Anúncios</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+
+              <Link to="/profile/my-offers-made">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Gift className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Minhas Ofertas</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+
+              <Link to="/profile/my-offers-received">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <MessageSquare className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Ofertas Recebidas</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+
+              <Link to="/profile/favorites">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Heart className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Favoritos</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+
+              <Link to="/profile/transactions"> {/* New Link for Transactions */}
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <ReceiptText className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Minhas Transações</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+
+              {/* Link para a página de Verificação de Perfil */}
+              {!profile?.is_verified && verificationStatus !== 'pending' && (
+                <Link to="/profile/verify">
+                  <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors border-l-4 border-blue-500">
+                    <div className="flex items-center gap-3">
+                      <UserCheck className="h-5 w-5 text-blue-500" />
+                      <span className="font-medium text-blue-500">Verificar Perfil</span>
+                    </div>
+                    <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                  </Card>
+                </Link>
+              )}
+              {verificationStatus === 'pending' && (
+                <Card className="p-4 flex items-center justify-between bg-blue-50/50 border-l-4 border-blue-500">
+                  <div className="flex items-center gap-3">
+                    <UserCheck className="h-5 w-5 text-blue-500" />
+                    <span className="font-medium text-blue-700">Verificação Pendente</span>
+                  </div>
+                  <span className="text-sm text-muted-foreground">Aguardando revisão</span>
+                </Card>
+              )}
+
+              <Link to="/profile/user-settings">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Settings className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Configurações</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+              
+              {/* Novo Card para o botão de Suporte */}
+              <Link to="/support">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <LifeBuoy className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Suporte</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+
+              {/* Novo Card para o botão de Acompanhar Tickets de Suporte */}
+              <Link to="/profile/support-tickets">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <LifeBuoy className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Meus Tickets de Suporte</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+
+              {/* Novo Card para o botão Sair */}
+              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors cursor-pointer" onClick={handleLogout}>
+                <div className="flex items-center gap-3">
+                  <LogOut className="h-5 w-5 text-destructive" />
+                  <span className="font-medium text-destructive">Sair</span>
+                </div>
+                <ArrowRight className="h-5 w-5 text-muted-foreground" />
+              </Card>
+
+              {/* Push Notifications Card - Mobile */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notificações Push</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Receba alertas importantes e atualizações diretamente no seu dispositivo.
+                  </p>
+                  <Button
+                    onClick={handleTogglePushNotifications}
+                    disabled={isCheckingPushStatus}
+                    className="w-full"
+                    variant={isPushEnabled ? "destructive" : "default"}
+                  >
+                    {isCheckingPushStatus ? (
+                      "Verificando..."
+                    ) : isPushEnabled ? (
+                      <>
+                        <BellOff className="mr-2 h-4 w-4" /> Desativar Notificações
+                      </>
+                    ) : (
+                      <>
+                        <Bell className="mr-2 h-4 w-4" /> Ativar Notificações
+                      </>
+                    )}
+                  </Button>
+                  {!isPushEnabled && !isCheckingPushStatus && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      *Você precisará permitir as notificações no seu navegador.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </main>
+        </div>
+      )}
+
+      {/* Desktop View */}
+      {!isMobile && (
+        <div className="flex flex-col flex-1 bg-background p-4 space-y-4">
+          <div className="flex flex-col items-center text-center space-y-2">
+            <Avatar className="w-20 h-20">
               <AvatarImage src={profile?.avatar_url || "/placeholder.svg"} alt={profile?.full_name || "User"} loading="lazy" />
               <AvatarFallback>{profile?.full_name?.charAt(0) || 'U'}</AvatarFallback>
             </Avatar>
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold">{profile?.full_name}</h2>
               {profile?.is_verified && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center justify-center">
-                        <BadgeCheck className="h-5 w-5 text-green-500" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Perfil Verificado</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center justify-center">
+                          <BadgeCheck className="h-5 w-5 text-green-500" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Perfil Verificado</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
             </div>
-            <div className="flex items-center gap-2 text-lg font-semibold">
-              <DollarSign className="h-5 w-5 text-yellow-400" />
-              <span>{userCredits} Créditos</span>
-            </div>
-            {userBadges && userBadges.length > 0 && (
-              <BadgeDisplay badges={userBadges} className="mt-2" />
+            {profile?.user_level && (
+              <Badge variant="secondary" className="text-sm">
+                Nível: {profile.user_level}
+              </Badge>
             )}
+            <div className="flex items-center gap-2 text-lg font-semibold">
+                <DollarSign className="h-5 w-5 text-yellow-400" />
+                <span>{userCredits} Créditos</span>
+              </div>
+              {userBadges && userBadges.length > 0 && (
+                <BadgeDisplay badges={userBadges} className="mt-2" />
+              )}
           </div>
-        </header>
 
-        <main className="p-4 flex-1">
           {needsProfessionalSetup && (
-            <Card className="mb-4 border-l-4 border-accent bg-accent/10 text-accent-foreground">
-              <CardHeader className="flex flex-row items-center gap-3 p-4">
-                <Briefcase className="h-6 w-6" />
-                <CardTitle className="text-lg">Complete seu Perfil Profissional!</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <p className="text-sm mb-3">
-                  Para oferecer seus serviços e aparecer nas buscas, precisamos de mais algumas informações.
-                </p>
-                <Button asChild className="w-full bg-accent hover:bg-accent/90 text-white">
-                  <Link to="/onboarding/professional-setup">Configurar Agora</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+              <Card className="mb-4 border-l-4 border-accent bg-accent/10 text-accent-foreground">
+                <CardHeader className="flex flex-row items-center gap-3 p-4">
+                  <Briefcase className="h-6 w-6" />
+                  <CardTitle className="text-lg">Complete seu Perfil Profissional!</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <p className="text-sm mb-3">
+                    Para oferecer seus serviços e aparecer nas buscas, precisamos de mais algumas informações.
+                  </p>
+                  <Button asChild className="w-full bg-accent hover:bg-accent/90 text-white">
+                    <Link to="/onboarding/professional-setup">Configurar Agora</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
           <div className="flex gap-3 mb-4"> {/* Changed to flex for side-by-side buttons */}
             <Button asChild className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-full h-12">
@@ -343,324 +569,103 @@ const UserProfilePage = () => {
             </Button>
           </div>
 
-          <div className="space-y-3">
-            <Link to="/profile/my-ads">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <List className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Meus Anúncios</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
+          <Tabs defaultValue="ads" className="w-full flex flex-col flex-1">
+            <TabsList className="grid w-full grid-cols-6 bg-primary/10 text-primary"> {/* Adjusted grid-cols */}
+              <TabsTrigger value="ads">Meus Anúncios</TabsTrigger>
+              <TabsTrigger value="offers-made">Minhas Ofertas</TabsTrigger>
+              <TabsTrigger value="offers-received">Ofertas Recebidas</TabsTrigger>
+              <TabsTrigger value="favorites">Favoritos</TabsTrigger>
+              <TabsTrigger value="transactions">Transações</TabsTrigger> {/* New Tab for Desktop */}
+              <TabsTrigger value="settings">Configurações</TabsTrigger>
+            </TabsList>
 
-            <Link to="/profile/my-offers-made">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <Gift className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Minhas Ofertas</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
+            <TabsContent value="ads" className="flex-1 mt-4">
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <LazyUserMyAdsPage />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="offers-made" className="flex-1 mt-4">
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <LazyUserMyOffersMadePage />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="offers-received" className="flex-1 mt-4">
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <LazyUserMyOffersReceivedPage />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="favorites" className="flex-1 mt-4">
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <LazyUserFavoritesPage />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="transactions" className="flex-1 mt-4"> {/* New Tab Content for Desktop */}
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                <LazyUserCreditTransactionsPage />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="settings" className="mt-4 space-y-4">
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                {profile && <ProfileSettingsForm profile={profile} onLogout={handleLogout} />}
+              </Suspense>
+              {/* Push Notifications Card - Desktop */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notificações Push</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Receba alertas importantes e atualizações diretamente no seu dispositivo.
+                  </p>
+                  <Button
+                    onClick={handleTogglePushNotifications}
+                    disabled={isCheckingPushStatus}
+                    className="w-full"
+                    variant={isPushEnabled ? "destructive" : "default"}
+                  >
+                    {isCheckingPushStatus ? (
+                      "Verificando..."
+                    ) : isPushEnabled ? (
+                      <>
+                        <BellOff className="mr-2 h-4 w-4" /> Desativar Notificações
+                      </>
+                    ) : (
+                      <>
+                        <Bell className="mr-2 h-4 w-4" /> Ativar Notificações
+                      </>
+                    )}
+                  </Button>
+                  {!isPushEnabled && !isCheckingPushStatus && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      *Você precisará permitir as notificações no seu navegador.
+                    </p>
+                  )}
+                </CardContent>
               </Card>
-            </Link>
-
-            <Link to="/profile/my-offers-received">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <MessageSquare className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Ofertas Recebidas</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-
-            <Link to="/profile/favorites">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <Heart className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Favoritos</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-
-            <Link to="/profile/transactions"> {/* New Link for Transactions */}
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <ReceiptText className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Minhas Transações</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-
-            {/* Link para a página de Verificação de Perfil */}
-            {!profile?.is_verified && verificationStatus !== 'pending' && (
-              <Link to="/profile/verify">
-                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors border-l-4 border-blue-500">
+              {/* Novo Card para o botão de Suporte */}
+              <Link to="/support">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
                   <div className="flex items-center gap-3">
-                    <UserCheck className="h-5 w-5 text-blue-500" />
-                    <span className="font-medium text-blue-500">Verificar Perfil</span>
+                    <LifeBuoy className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Suporte</span>
                   </div>
                   <ArrowRight className="h-5 w-5 text-muted-foreground" />
                 </Card>
               </Link>
-            )}
-            {verificationStatus === 'pending' && (
-              <Card className="p-4 flex items-center justify-between bg-blue-50/50 border-l-4 border-blue-500">
-                <div className="flex items-center gap-3">
-                  <UserCheck className="h-5 w-5 text-blue-500" />
-                  <span className="font-medium text-blue-700">Verificação Pendente</span>
-                </div>
-                <span className="text-sm text-muted-foreground">Aguardando revisão</span>
-              </Card>
-            )}
-
-            <Link to="/profile/user-settings">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <Settings className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Configurações</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-            
-            {/* Novo Card para o botão de Suporte */}
-            <Link to="/support">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <LifeBuoy className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Suporte</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-
-            {/* Novo Card para o botão de Acompanhar Tickets de Suporte */}
-            <Link to="/profile/support-tickets">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <LifeBuoy className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Meus Tickets de Suporte</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-
-            {/* Novo Card para o botão Sair */}
-            <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors cursor-pointer" onClick={handleLogout}>
-              <div className="flex items-center gap-3">
-                <LogOut className="h-5 w-5 text-destructive" />
-                <span className="font-medium text-destructive">Sair</span>
-              </div>
-              <ArrowRight className="h-5 w-5 text-muted-foreground" />
-            </Card>
-
-            {/* Push Notifications Card - Mobile */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Notificações Push</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Receba alertas importantes e atualizações diretamente no seu dispositivo.
-                </p>
-                <Button
-                  onClick={handleTogglePushNotifications}
-                  disabled={isCheckingPushStatus}
-                  className="w-full"
-                  variant={isPushEnabled ? "destructive" : "default"}
-                >
-                  {isCheckingPushStatus ? (
-                    "Verificando..."
-                  ) : isPushEnabled ? (
-                    <>
-                      <BellOff className="mr-2 h-4 w-4" /> Desativar Notificações
-                    </>
-                  ) : (
-                    <>
-                      <Bell className="mr-2 h-4 w-4" /> Ativar Notificações
-                    </>
-                  )}
-                </Button>
-                {!isPushEnabled && !isCheckingPushStatus && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    *Você precisará permitir as notificações no seu navegador.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </main>
-      </div>
-
-      {/* Desktop View */}
-      <div className="hidden md:flex flex-col flex-1 bg-background p-4 space-y-4">
-        <div className="flex flex-col items-center text-center space-y-2">
-          <Avatar className="w-20 h-20">
-            <AvatarImage src={profile?.avatar_url || "/placeholder.svg"} alt={profile?.full_name || "User"} loading="lazy" />
-            <AvatarFallback>{profile?.full_name?.charAt(0) || 'U'}</AvatarFallback>
-          </Avatar>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold">{profile?.full_name}</h2>
-            {profile?.is_verified && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center justify-center">
-                        <BadgeCheck className="h-5 w-5 text-green-500" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Perfil Verificado</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-          </div>
-          {profile?.user_level && (
-            <Badge variant="secondary" className="text-sm">
-              Nível: {profile.user_level}
-            </Badge>
-          )}
-          <div className="flex items-center gap-2 text-lg font-semibold">
-              <DollarSign className="h-5 w-5 text-yellow-400" />
-              <span>{userCredits} Créditos</span>
-            </div>
-            {userBadges && userBadges.length > 0 && (
-              <BadgeDisplay badges={userBadges} className="mt-2" />
-            )}
+              {/* Novo Card para o botão de Acompanhar Tickets de Suporte */}
+              <Link to="/profile/support-tickets">
+                <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <LifeBuoy className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Meus Tickets de Suporte</span>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                </Card>
+              </Link>
+            </TabsContent>
+          </Tabs>
         </div>
-
-        {needsProfessionalSetup && (
-            <Card className="mb-4 border-l-4 border-accent bg-accent/10 text-accent-foreground">
-              <CardHeader className="flex flex-row items-center gap-3 p-4">
-                <Briefcase className="h-6 w-6" />
-                <CardTitle className="text-lg">Complete seu Perfil Profissional!</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <p className="text-sm mb-3">
-                  Para oferecer seus serviços e aparecer nas buscas, precisamos de mais algumas informações.
-                </p>
-                <Button asChild className="w-full bg-accent hover:bg-accent/90 text-white">
-                  <Link to="/onboarding/professional-setup">Configurar Agora</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-        <div className="flex gap-3 mb-4"> {/* Changed to flex for side-by-side buttons */}
-          <Button asChild className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-full h-12">
-            <Link to="/redeem" className="flex items-center justify-center gap-2">
-              <Ticket className="h-5 w-5" />
-              <span className="font-medium">Resgatar Voucher</span>
-            </Link>
-          </Button>
-          <Button asChild className="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full h-12">
-            <Link to="/buy-credits" className="flex items-center justify-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              <span className="font-medium">Comprar Créditos</span>
-            </Link>
-          </Button>
-        </div>
-
-        <Tabs defaultValue="ads" className="w-full flex flex-col flex-1">
-          <TabsList className="grid w-full grid-cols-6 bg-primary/10 text-primary"> {/* Adjusted grid-cols */}
-            <TabsTrigger value="ads">Meus Anúncios</TabsTrigger>
-            <TabsTrigger value="offers-made">Minhas Ofertas</TabsTrigger>
-            <TabsTrigger value="offers-received">Ofertas Recebidas</TabsTrigger>
-            <TabsTrigger value="favorites">Favoritos</TabsTrigger>
-            <TabsTrigger value="transactions">Transações</TabsTrigger> {/* New Tab for Desktop */}
-            <TabsTrigger value="settings">Configurações</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="ads" className="flex-1 mt-4">
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <LazyUserMyAdsPage />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="offers-made" className="flex-1 mt-4">
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <LazyUserMyOffersMadePage />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="offers-received" className="flex-1 mt-4">
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <LazyUserMyOffersReceivedPage />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="favorites" className="flex-1 mt-4">
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <LazyUserFavoritesPage />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="transactions" className="flex-1 mt-4"> {/* New Tab Content for Desktop */}
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <LazyUserCreditTransactionsPage />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="settings" className="mt-4 space-y-4">
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              {profile && <ProfileSettingsForm profile={profile} onLogout={handleLogout} />}
-            </Suspense>
-            {/* Push Notifications Card - Desktop */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Notificações Push</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Receba alertas importantes e atualizações diretamente no seu dispositivo.
-                </p>
-                <Button
-                  onClick={handleTogglePushNotifications}
-                  disabled={isCheckingPushStatus}
-                  className="w-full"
-                  variant={isPushEnabled ? "destructive" : "default"}
-                >
-                  {isCheckingPushStatus ? (
-                    "Verificando..."
-                  ) : isPushEnabled ? (
-                    <>
-                      <BellOff className="mr-2 h-4 w-4" /> Desativar Notificações
-                    </>
-                  ) : (
-                    <>
-                      <Bell className="mr-2 h-4 w-4" /> Ativar Notificações
-                    </>
-                  )}
-                </Button>
-                {!isPushEnabled && !isCheckingPushStatus && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    *Você precisará permitir as notificações no seu navegador.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            {/* Novo Card para o botão de Suporte */}
-            <Link to="/support">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <LifeBuoy className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Suporte</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-            {/* Novo Card para o botão de Acompanhar Tickets de Suporte */}
-            <Link to="/profile/support-tickets">
-              <Card className="p-4 flex items-center justify-between hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <LifeBuoy className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Meus Tickets de Suporte</span>
-                </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
-          </TabsContent>
-        </Tabs>
-      </div>
+      )}
     </>
   );
 };

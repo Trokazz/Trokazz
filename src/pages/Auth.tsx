@@ -91,16 +91,16 @@ const AuthPage = () => {
   const SignUpForm = (
     <form onSubmit={handleSignUp} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="fullName" className={cn(isLogin ? "text-primary-foreground/80" : "text-foreground")}>Nome</Label>
-        <Input id="fullName" type="text" placeholder="Seu nome completo" value={fullName} onChange={(e) => setFullName(e.target.value)} required className={cn(isLogin ? "bg-primary-foreground/10 border-primary-foreground/20 text-white placeholder:text-primary-foreground/50" : "bg-background border-border text-foreground placeholder:text-muted-foreground")} />
+        <Label htmlFor="fullName" className="text-foreground">Nome</Label>
+        <Input id="fullName" type="text" placeholder="Seu nome completo" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="bg-background border-border text-foreground placeholder:text-muted-foreground" />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="email-signup" className={cn(isLogin ? "text-primary-foreground/80" : "text-foreground")}>E-mail</Label>
-        <Input id="email-signup" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required className={cn(isLogin ? "bg-primary-foreground/10 border-primary-foreground/20 text-white placeholder:text-primary-foreground/50" : "bg-background border-border text-foreground placeholder:text-muted-foreground")} />
+        <Label htmlFor="email-signup" className="text-foreground">E-mail</Label>
+        <Input id="email-signup" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-background border-border text-foreground placeholder:text-muted-foreground" />
       </div>
       <div className="space-y-2 relative">
-        <Label htmlFor="password-signup" className={cn(isLogin ? "text-primary-foreground/80" : "text-foreground")}>Senha</Label>
-        <Input id="password-signup" type={showPassword ? "text" : "password"} placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} required className={cn(isLogin ? "bg-primary-foreground/10 border-primary-foreground/20 text-white placeholder:text-primary-foreground/50" : "bg-background border-border text-foreground placeholder:text-muted-foreground")} />
+        <Label htmlFor="password-signup" className="text-foreground">Senha</Label>
+        <Input id="password-signup" type={showPassword ? "text" : "password"} placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-background border-border text-foreground placeholder:text-muted-foreground" />
         <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-7 h-7 w-7" onClick={() => setShowPassword(!showPassword)}>
           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </Button>
@@ -113,13 +113,13 @@ const AuthPage = () => {
   const LoginForm = (
     <form onSubmit={handleLogin} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email-login" className="text-primary-foreground/80">E-mail</Label>
-        <Input id="email-login" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-primary-foreground/10 border-primary-foreground/20 text-white placeholder:text-primary-foreground/50" />
+        <Label htmlFor="email-login" className="text-foreground">E-mail</Label>
+        <Input id="email-login" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-background border-border text-foreground placeholder:text-muted-foreground" />
       </div>
       <div className="space-y-2 relative">
-        <Label htmlFor="password-login" className="text-primary-foreground/80">Senha</Label>
-        <Input id="password-login" type={showPassword ? "text" : "password"} placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-primary-foreground/10 border-primary-foreground/20 text-white placeholder:text-primary-foreground/50" />
-        <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-7 h-7 w-7 text-primary-foreground/80 hover:bg-primary-foreground/10" onClick={() => setShowPassword(!showPassword)}>
+        <Label htmlFor="password-login" className="text-foreground">Senha</Label>
+        <Input id="password-login" type={showPassword ? "text" : "password"} placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-background border-border text-foreground placeholder:text-muted-foreground" />
+        <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-7 h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => setShowPassword(!showPassword)}>
           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </Button>
       </div>
@@ -138,31 +138,37 @@ const AuthPage = () => {
       className="flex flex-col items-center justify-center min-h-screen bg-background p-4"
     >
       <div className="text-center mb-8">
-        <Link to="/" className="flex items-center justify-center gap-2 font-semibold text-3xl text-foreground"> {/* Alterado para text-foreground */}
+        <Link to="/" className="flex items-center justify-center gap-2 font-semibold text-3xl text-foreground">
           <img src="/logo.png" alt="Trokazz Logo" className="h-10 w-10 text-accent" />
           <span>Trokazz</span>
         </Link>
-        <h1 className="text-2xl font-semibold text-foreground mt-2">Página de cadastro e Login</h1> {/* Alterado para text-foreground */}
+        <h1 className="text-2xl font-semibold text-foreground mt-2">Página de cadastro e Login</h1>
       </div>
 
       {/* Desktop View */}
-      <Card className="hidden md:grid md:grid-cols-2 w-full max-w-4xl overflow-hidden bg-transparent border-none shadow-none">
-        <div className="p-8 bg-card rounded-l-lg"> {/* Signup card */}
-          <CardHeader className="text-center p-0 mb-6">
-            <CardTitle className="text-2xl">Cadastro</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {SignUpForm}
-          </CardContent>
-        </div>
-        <div className="p-8 bg-primary text-primary-foreground rounded-r-lg"> {/* Login card */}
-          <CardHeader className="text-center p-0 mb-6">
-            <CardTitle className="text-2xl">Login</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {LoginForm}
-          </CardContent>
-        </div>
+      <Card className="hidden md:block w-full max-w-md bg-card text-foreground">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">{isLogin ? 'Login' : 'Cadastro'}</CardTitle>
+          <div className="flex justify-center mt-4">
+            <Button
+              variant={isLogin ? 'default' : 'ghost'}
+              onClick={() => setIsLogin(true)}
+              className={cn(isLogin ? "bg-accent hover:bg-accent/90 text-accent-foreground" : "text-foreground hover:bg-muted")}
+            >
+              Login
+            </Button>
+            <Button
+              variant={!isLogin ? 'default' : 'ghost'}
+              onClick={() => setIsLogin(false)}
+              className={cn(!isLogin ? "bg-accent hover:bg-accent/90 text-accent-foreground" : "text-foreground hover:bg-muted")}
+            >
+              Cadastro
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLogin ? LoginForm : SignUpForm}
+        </CardContent>
       </Card>
 
       {/* Mobile View */}
@@ -183,9 +189,9 @@ const AuthPage = () => {
             Login
           </Button>
         </div>
-        <Card className={cn(isLogin ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground')}> {/* Mobile Card */}
+        <Card className={cn(isLogin ? 'bg-card text-foreground' : 'bg-card text-foreground')}> {/* Mobile Card */}
           <CardHeader>
-            <CardTitle className={cn(isLogin ? "text-primary-foreground" : "text-foreground")}>{isLogin ? 'Login' : 'Cadastro'}</CardTitle>
+            <CardTitle className="text-foreground">{isLogin ? 'Login' : 'Cadastro'}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLogin ? LoginForm : SignUpForm}
