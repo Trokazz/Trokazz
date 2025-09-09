@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, FileText, CreditCard, Tag, Search } from "lucide-react";
+import { Users, FileText, CreditCard, Tag, Search, MessageSquare, Heart } from "lucide-react"; // Import MessageSquare and Heart
 import {
   LineChart,
   Line,
@@ -135,6 +135,46 @@ const AdminDashboard = () => {
                     </PieChart>
                 </ResponsiveContainer>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Métricas de Engajamento</h2>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Total de Ofertas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{dashboardData?.total_offers?.toLocaleString()}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Total de Conversas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{dashboardData?.total_conversations?.toLocaleString()}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Total de Mensagens</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-2">
+              <MessageSquare className="h-8 w-8 text-primary" />
+              <p className="text-3xl font-bold">{dashboardData?.total_messages?.toLocaleString()}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Total de Favoritos</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-2">
+              <Heart className="h-8 w-8 text-red-500" />
+              <p className="text-3xl font-bold">{dashboardData?.total_favorites?.toLocaleString()}</p>
             </CardContent>
           </Card>
         </div>

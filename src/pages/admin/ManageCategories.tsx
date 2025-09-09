@@ -1,294 +1,336 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Edit, PlusCircle, Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PlusCircle, Edit, Trash2, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { showLoading, showSuccess, showError, dismissToast } from "@/utils/toast";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Import AlertDialog components
+import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { useState } from "react";
-import { Switch } from "@/components/ui/switch";
-import * as Icons from "lucide-react"; // Importar todos os ícones Lucide
-import { Database } from "@/types/supabase"; // Importar o tipo Database
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { showError, showSuccess } from "@/utils/toast";
+import { Icon } from "@/components/IconMapper";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const categorySchema = z.object({
-  name: z.string().min(1, "O nome da categoria é obrigatório."),
-  slug: z.string().min(1, "O slug é obrigatório.").regex(/^[a-z0-9-]+$/, "O slug deve conter apenas letras minúsculas, números e hífens."),
+  name: z.string().min(1, "Nome é obrigatório."),
+  slug: z.string().min(1, "Slug é obrigatório.").regex(/^[a-z0-9-]+$/, "Slug deve conter apenas letras minúsculas, números e hífens."),
   icon: z.string().optional().nullable(),
   parent_slug: z.string().optional().nullable(),
-  image_url: z.string().optional().nullable(),
-  custom_fields: z.string().optional().nullable(), // JSON string
-  connected_service_tags: z.string().optional().nullable(), // Comma-separated string
+  image_url: z.string().url("URL da imagem inválida.").optional().nullable(),
 });
 
-type Category = Database['public']['Tables']['categories']['Row'];
-type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
-type CategoryUpdate = Database['public']['Tables']['categories']['Update'];
+type CategoryFormData = z.infer<typeof categorySchema>;
 
 const fetchCategories = async () => {
-  console.log("ManageCategories: Buscando categorias...");
   const { data, error } = await supabase.from("categories").select("*").order("name");
-  if (error) {
-    console.error("ManageCategories: Erro ao buscar categorias:", error);
-    throw new Error(error.message);
-  }
-  console.log("ManageCategories: Categorias buscadas:", data);
+  if (error) throw new Error(error.message);
   return data;
 };
 
-const ManageCategories = () => {
+const ManageCategoriesPage = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<any>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
-  const { data: categories, isLoading } = useQuery({
-    queryKey: ["categories"],
-    queryFn: fetchCategories,
-  });
-
-  const form = useForm<z.infer<typeof categorySchema>>({
+  const { register, handleSubmit, control, reset, getValues, formState: { errors } } = useForm<CategoryFormData>({
     resolver: zodResolver(categorySchema),
   });
 
-  const handleOpenDialog = (category: Category | null = null) => {
-    setEditingCategory(category);
-    form.reset({
-      name: category?.name || "",
-      slug: category?.slug || "",
-      icon: category?.icon || "",
-      parent_slug: category?.parent_slug || "",
-      image_url: category?.image_url || "",
-      custom_fields: category?.custom_fields ? JSON.stringify(category.custom_fields, null, 2) : "",
-      connected_service_tags: category?.connected_service_tags?.join(', ') || "",
-    });
+  const { data: categories, isLoading, error } = useQuery({
+    queryKey: ["adminCategories"],
+    queryFn: fetchCategories,
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (formData: { data: CategoryFormData, id?: string }) => {
+      const dataToSubmit = {
+        ...formData.data,
+        icon: formData.data.icon || null,
+        parent_slug: formData.data.parent_slug || null,
+        image_url: formData.data.image_url || null,
+      };
+
+      if (formData.id) {
+        const { error } = await supabase.from("categories").update(dataToSubmit).eq("id", formData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("categories").insert(dataToSubmit);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminCategories"] });
+      queryClient.invalidateQueries({ queryKey: ["allCategories"] }); // Invalidate public categories
+      showSuccess(`Categoria ${selectedCategory ? 'atualizada' : 'criada'} com sucesso!`);
+      setIsDialogOpen(false);
+      setSelectedCategory(null);
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("categories").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminCategories"] });
+      queryClient.invalidateQueries({ queryKey: ["allCategories"] });
+      showSuccess("Categoria removida com sucesso!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  useEffect(() => {
+    if (selectedCategory) {
+      reset(selectedCategory);
+    } else {
+      reset({
+        name: '',
+        slug: '',
+        icon: null,
+        parent_slug: null,
+        image_url: null,
+      });
+    }
+  }, [selectedCategory, reset]);
+
+  const handleOpenDialog = (category: any = null) => {
+    setSelectedCategory(category);
     setIsDialogOpen(true);
   };
 
-  const onSubmit = async (values: z.infer<typeof categorySchema>) => {
-    setIsSubmitting(true);
-    const toastId = showLoading(editingCategory ? "Atualizando categoria..." : "Criando categoria...");
-    try {
-      let parsedCustomFields: Database['public']['Tables']['categories']['Update']['custom_fields'] = null;
-      if (values.custom_fields) {
-        try {
-          const trimmedCustomFields = values.custom_fields.trim();
-          if (trimmedCustomFields !== "") {
-            parsedCustomFields = JSON.parse(trimmedCustomFields);
-            console.log("ManageCategories: Parsed custom_fields before sending to DB:", parsedCustomFields);
-          } else {
-            console.log("ManageCategories: custom_fields string is empty, setting to null.");
-          }
-        } catch (e) {
-          console.error("ManageCategories: JSON parse error for custom_fields:", e);
-          throw new Error("Formato JSON inválido para 'Configuração de Filtros'.");
-        }
-      }
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id);
+  };
 
-      const connectedServiceTagsArray = values.connected_service_tags?.split(',').map(tag => tag.trim()).filter(Boolean) || null;
-
-      let error;
-      if (editingCategory) {
-        const payload: CategoryUpdate = {
-          name: values.name,
-          icon: values.icon,
-          parent_slug: values.parent_slug || null,
-          image_url: values.image_url || null,
-          custom_fields: parsedCustomFields,
-          connected_service_tags: connectedServiceTagsArray,
-        };
-        console.log("ManageCategories: Updating category with payload:", payload);
-        ({ error } = await supabase.from("categories").update(payload).eq("slug", editingCategory.slug));
+  const toggleExpand = (slug: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(slug)) {
+        newSet.delete(slug);
       } else {
-        const payload: CategoryInsert = {
-          name: values.name,
-          slug: values.slug,
-          icon: values.icon || null,
-          parent_slug: values.parent_slug || null,
-          image_url: values.image_url || null,
-          custom_fields: parsedCustomFields,
-          connected_service_tags: connectedServiceTagsArray,
-        };
-        console.log("ManageCategories: Inserting category with payload:", payload);
-        ({ error } = await supabase.from("categories").insert(payload));
+        newSet.add(slug);
       }
-      if (error) {
-        if (error.code === '23505') { // Unique violation
-          throw new Error("Uma categoria com este slug já existe.");
-        }
-        throw new Error(error.message);
-      }
-
-      dismissToast(toastId);
-      showSuccess(`Categoria ${editingCategory ? "atualizada" : "criada"} com sucesso!`);
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-      queryClient.refetchQueries({ queryKey: ["categories"] }); // Força a re-busca para garantir a atualização
-      setIsDialogOpen(false);
-    } catch (err) {
-      dismissToast(toastId);
-      showError(err instanceof Error ? err.message : "Ocorreu um erro.");
-      console.error("ManageCategories: Error during onSubmit:", err);
-    } finally {
-      setIsSubmitting(false);
-    }
+      return newSet;
+    });
   };
 
-  const handleDelete = async (slug: string) => {
-    const toastId = showLoading("Excluindo categoria...");
-    try {
-      const { error } = await supabase.from("categories").delete().eq("slug", slug);
-      if (error) throw new Error(error.message);
-      dismissToast(toastId);
-      showSuccess("Categoria excluída com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-      queryClient.refetchQueries({ queryKey: ["categories"] }); // Força a re-busca para garantir a atualização
-    } catch (err) {
-      dismissToast(toastId);
-      showError(err instanceof Error ? err.message : "Ocorreu um erro.");
-    }
-  };
+  const parentCategories = categories?.filter(c => !c.parent_slug) || [];
+  const getSubcategories = (parentSlug: string) => categories?.filter(c => c.parent_slug === parentSlug) || [];
 
-  const renderIcon = (iconName: string | null) => {
-    if (!iconName) return <Icons.HelpCircle className="h-5 w-5 text-muted-foreground" />;
-    const Icon = (Icons as any)[iconName] || Icons.HelpCircle;
-    return <Icon className="h-5 w-5 text-muted-foreground" />;
-  };
+  const isFormDisabled = mutation.isPending;
+  const isDeleting = deleteMutation.isPending;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Gerenciar Categorias</CardTitle>
-          <CardDescription>Crie e edite as categorias de anúncios do seu site.</CardDescription>
-        </div>
-        <Button onClick={() => handleOpenDialog()}>
+        <CardTitle>Gerenciar Categorias</CardTitle>
+        <Button onClick={() => handleOpenDialog()} disabled={isFormDisabled || isDeleting}>
           <PlusCircle className="mr-2 h-4 w-4" /> Nova Categoria
         </Button>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        {isLoading ? (
+          <Skeleton className="h-64 w-full" />
+        ) : error ? (
+          <p className="text-destructive">Falha ao carregar categorias.</p>
+        ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Slug</TableHead>
                 <TableHead>Ícone</TableHead>
-                <TableHead>Categoria Pai</TableHead>
+                <TableHead>Parent</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell colSpan={5}><Skeleton className="h-8 w-full" /></TableCell>
-                </TableRow>
+              {parentCategories.map((category) => (
+                <React.Fragment key={category.id}>
+                  <TableRow>
+                    <TableCell className="font-medium flex items-center gap-2">
+                      {getSubcategories(category.slug).length > 0 && (
+                        <Button variant="ghost" size="icon" onClick={() => toggleExpand(category.slug)} className="h-6 w-6" disabled={isFormDisabled || isDeleting}>
+                          {expandedCategories.has(category.slug) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                      )}
+                      <Icon name={category.icon} className="h-5 w-5 mr-2" />
+                      {category.name}
+                    </TableCell>
+                    <TableCell>{category.slug}</TableCell>
+                    <TableCell>{category.icon || 'N/A'}</TableCell>
+                    <TableCell>N/A</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(category)} disabled={isFormDisabled || isDeleting}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" disabled={isFormDisabled || isDeleting}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta ação não pode ser desfeita. Isso removerá permanentemente esta categoria e todas as suas subcategorias.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(category.id)} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                              {isDeleting ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Excluindo...
+                                </>
+                              ) : (
+                                'Excluir'
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                  {expandedCategories.has(category.slug) && getSubcategories(category.slug).map((subCategory) => (
+                    <TableRow key={subCategory.id} className="bg-muted/50">
+                      <TableCell className="pl-12 flex items-center gap-2">
+                        <Icon name={subCategory.icon} className="h-4 w-4 mr-2" />
+                        {subCategory.name}
+                      </TableCell>
+                      <TableCell>{subCategory.slug}</TableCell>
+                      <TableCell>{subCategory.icon || 'N/A'}</TableCell>
+                      <TableCell>{subCategory.parent_slug}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(subCategory)} disabled={isFormDisabled || isDeleting}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" disabled={isFormDisabled || isDeleting}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta ação não pode ser desfeita. Isso removerá permanentemente esta subcategoria.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(subCategory.id)} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                                {isDeleting ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Excluindo...
+                                  </>
+                                ) : (
+                                  'Excluir'
+                                )}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </React.Fragment>
               ))}
-              {categories?.map((category: Category) => (
-                <TableRow key={category.slug}>
-                  <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell>{category.slug}</TableCell>
-                  <TableCell className="flex items-center gap-2">{renderIcon(category.icon)} {category.icon}</TableCell>
-                  <TableCell>{category.parent_slug || '-'}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(category)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(category.slug)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!isLoading && categories?.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    Nenhuma categoria encontrada.
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
-        </div>
+        )}
       </CardContent>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingCategory ? "Editar" : "Nova"} Categoria</DialogTitle>
-            <DialogDescription>
-              Defina os detalhes da categoria e seus campos customizados.
-            </DialogDescription>
+            <DialogTitle>{selectedCategory ? 'Editar' : 'Nova'} Categoria</DialogTitle>
           </DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={handleSubmit((data) => mutation.mutate({ data, id: selectedCategory?.id }))} className="space-y-4">
             <div>
-              <Label htmlFor="name">Nome da Categoria</Label>
-              <Input id="name" {...form.register("name")} />
-              {form.formState.errors.name && <p className="text-red-500 text-sm">{form.formState.errors.name.message}</p>}
+              <Label htmlFor="name">Nome</Label>
+              <Input id="name" {...register("name")} disabled={isFormDisabled} />
+              {errors.name && <p className="text-destructive text-sm">{errors.name.message}</p>}
             </div>
             <div>
-              <Label htmlFor="slug">Slug (URL)</Label>
-              <Input id="slug" {...form.register("slug")} disabled={!!editingCategory} />
-              {form.formState.errors.slug && <p className="text-red-500 text-sm">{form.formState.errors.slug.message}</p>}
+              <Label htmlFor="slug">Slug</Label>
+              <Input id="slug" {...register("slug")} disabled={!!selectedCategory || isFormDisabled} />
+              {errors.slug && <p className="text-destructive text-sm">{errors.slug.message}</p>}
             </div>
             <div>
-              <Label htmlFor="icon">Ícone (Lucide)</Label>
-              <Input id="icon" {...form.register("icon")} placeholder="Ex: Car, Home, Smartphone" />
-              {form.formState.errors.icon && <p className="text-red-500 text-sm">{form.formState.errors.icon.message}</p>}
+              <Label htmlFor="icon">Ícone (Nome do Lucide Icon)</Label>
+              <Input id="icon" {...register("icon")} placeholder="Ex: Home, Car, Wrench" disabled={isFormDisabled} />
             </div>
             <div>
-              <Label htmlFor="parent_slug">Categoria Pai (Slug)</Label>
-              <Input id="parent_slug" {...form.register("parent_slug")} placeholder="Deixe em branco para categoria principal" />
-              {form.formState.errors.parent_slug && <p className="text-red-500 text-sm">{form.formState.errors.parent_slug.message}</p>}
+              <Label htmlFor="parent_slug">Categoria Pai (Opcional)</Label>
+              <Select onValueChange={(value) => reset({ ...getValues(), parent_slug: value === "none-parent" ? null : value })} value={selectedCategory?.parent_slug || "none-parent"} disabled={isFormDisabled}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma categoria pai" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none-parent">Nenhuma (Categoria Principal)</SelectItem>
+                  {categories?.filter(c => !c.parent_slug).map(cat => (
+                    <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="image_url">URL da Imagem (Opcional)</Label>
-              <Input id="image_url" {...form.register("image_url")} placeholder="URL para imagem de destaque da categoria" />
-              {form.formState.errors.image_url && <p className="text-red-500 text-sm">{form.formState.errors.image_url.message}</p>}
-            </div>
-            <div>
-              <Label htmlFor="connected_service_tags">Tags de Serviço Conectadas (separadas por vírgula)</Label>
-              <Input id="connected_service_tags" {...form.register("connected_service_tags")} placeholder="Ex: eletricista, montador_moveis" />
-              <p className="text-sm text-muted-foreground mt-1">
-                Se esta categoria está relacionada a serviços (ex: "Eletrônicos" pode ter "instalador_eletronicos").
-              </p>
-              {form.formState.errors.connected_service_tags && <p className="text-red-500 text-sm">{form.formState.errors.connected_service_tags.message}</p>}
-            </div>
-            <div>
-              <Label htmlFor="custom_fields">Configuração de Filtros (JSON)</Label>
-              <Textarea
-                id="custom_fields"
-                {...form.register("custom_fields")}
-                rows={10}
-                className="font-mono"
-                placeholder={`{\n  "hasPriceFilter": true,\n  "fields": [\n    {\n      "name": "marca",\n      "label": "Marca",\n      "type": "text"\n    }\n  ]\n}`}
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                Defina campos adicionais e filtros para anúncios desta categoria em formato JSON.
-              </p>
-              {form.formState.errors.custom_fields && <p className="text-red-500 text-sm">{form.formState.errors.custom_fields.message}</p>}
+              <Input id="image_url" {...register("image_url")} placeholder="https://example.com/image.jpg" disabled={isFormDisabled} />
+              {errors.image_url && <p className="text-destructive text-sm">{errors.image_url.message}</p>}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isFormDisabled}>Cancelar</Button>
+              <Button type="submit" disabled={isFormDisabled}>
+                {isFormDisabled ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Salvando...
                   </>
                 ) : (
-                  "Salvar"
+                  'Salvar'
                 )}
               </Button>
             </DialogFooter>
@@ -299,4 +341,4 @@ const ManageCategories = () => {
   );
 };
 
-export default ManageCategories;
+export default ManageCategoriesPage;

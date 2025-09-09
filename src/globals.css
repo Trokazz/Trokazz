@@ -4,102 +4,65 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 224 71% 4%;
+    --background: 240 5% 96%; /* Light Gray */
+    --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
+    --card-foreground: 222.2 84% 4.9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71% 4%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 240 82% 60%;
-    --primary-foreground: 0 0% 100%;
-    --primary-darker: 240 82% 50%; /* Nova variável para o hover do botão */
+    --primary: 220 40% 25%; /* Dark Blue */
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 215 28% 96%;
-    --secondary-foreground: 224 71% 4%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
-    --muted: 215 28% 96%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 215 28% 96%;
-    --accent-foreground: 224 71% 4%;
-    --accent-gradient: 262 82% 65%;
+    --accent: 25 95% 53%; /* Orange */
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 215 20% 90%;
-    --input: 215 20% 90%;
-    --ring: 240 82% 60%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-
-    --olx-orange: 25 100% 50%; /* HSL for #FF8C00 */
-    --olx-orange-foreground: 0 0% 100%; /* HSL for #FFFFFF */
-    --olx-orange-darker: 25 100% 45%; /* A slightly darker shade for hover */
   }
 
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 215 20% 65%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
 
-    --card: 224 71% 4%;
-    --card-foreground: 215 20% 65%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 224 71% 4%;
-    --popover-foreground: 215 20% 65%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 240 82% 60%;
-    --primary-foreground: 0 0% 100%;
-    --primary-darker: 240 82% 50%; /* Nova variável para o hover do botão */
+    --primary: 217 33% 30%;
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 215 28% 17%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 215 28% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 215 28% 17%;
+    --accent: 25 95% 60%;
     --accent-foreground: 0 0% 100%;
-    --accent-gradient: 262 82% 65%;
 
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 215 28% 17%;
-    --input: 215 28% 17%;
-    --ring: 240 82% 60%;
-    
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 240 82% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-
-    --olx-orange: 25 100% 50%; /* HSL for #FF8C00 */
-    --olx-orange-foreground: 0 0% 100%; /* HSL for #FFFFFF */
-    --olx-orange-darker: 25 100% 45%; /* A slightly darker shade for hover */
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
   }
 }
 
@@ -108,30 +71,13 @@
     @apply border-border;
   }
 
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
   body {
     @apply bg-background text-foreground;
   }
-}
-
-/* New styles for drag and drop */
-.dragging {
-  opacity: 0.5;
-  border: 2px dashed hsl(var(--primary));
-}
-
-/* Custom styles for Supabase Auth UI buttons to prevent disappearance on hover */
-.supabase-auth-container button[type="submit"] {
-  /* Ensure button is always visible and not transformed away */
-  opacity: 1 !important;
-  transform: none !important;
-  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out !important;
-  background-color: hsl(var(--olx-orange)) !important; /* Ensure default background is applied */
-  color: hsl(var(--olx-orange-foreground)) !important; /* Ensure default text color is applied */
-}
-
-.supabase-auth-container button[type="submit"]:hover {
-  background-color: hsl(var(--olx-orange-darker)) !important;
-  color: hsl(var(--olx-orange-foreground)) !important;
-  opacity: 1 !important;
-  transform: none !important;
 }

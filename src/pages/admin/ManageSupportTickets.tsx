@@ -1,225 +1,398 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { useState, useMemo } from "react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { Eye, MessageSquare, Bug, Lightbulb, HelpCircle, CheckCircle, Clock, XCircle, ArrowUp, ArrowDown } from "lucide-react";
-import { PaginationControls } from "@/components/PaginationControls";
-import { useSearchParams, Link } from "react-router-dom";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { format } from 'date-fns';
+import { showError, showSuccess } from "@/utils/toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Eye, MessageSquare, CheckCircle, XCircle, Loader2 } from "lucide-react"; // Import Loader2
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useState, useEffect, useRef } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
+import { useInView } from 'react-intersection-observer';
 
-const TICKETS_PER_PAGE = 15;
-
-type SupportTicket = {
+interface Ticket {
   id: string;
-  user_id: string | null;
+  user_id: string;
   subject: string;
   message: string;
-  type: 'question' | 'bug' | 'suggestion' | 'other';
-  status: 'new' | 'in_progress' | 'resolved' | 'closed';
+  type: string;
+  status: 'new' | 'open' | 'in_progress' | 'resolved' | 'closed';
   created_at: string;
   updated_at: string;
-  last_admin_reply_at: string | null;
-  last_user_reply_at: string | null;
-  profiles: { full_name: string | null; email: string | null; } | null;
-};
+  profiles: { // Make profiles nullable
+    full_name: string;
+    email: string;
+    avatar_url: string;
+  } | null;
+  ticket_messages: {
+    id: string;
+    sender_id: string;
+    content: string;
+    created_at: string;
+    is_admin_message: boolean;
+    profiles: { // Make message sender profiles nullable too
+      full_name: string;
+      avatar_url: string;
+    } | null;
+  }[];
+}
 
-const fetchSupportTickets = async ({ page, statusFilter, typeFilter, searchTerm, sorting }: { page: number; statusFilter: string; typeFilter: string; searchTerm: string; sorting: { column: string; order: 'asc' | 'desc' } }) => {
+const fetchSupportTickets = async ({ pageParam = 0, pageSize = 20, statusFilter }: { pageParam?: number; pageSize?: number; statusFilter?: Ticket['status'] | 'all'; }) => {
+  const offset = pageParam * pageSize;
   let query = supabase
-    .from("support_tickets")
-    .select("id, subject, type, status, created_at, updated_at, profiles(full_name, email)", { count: 'exact' }) // Otimizado aqui
-    .order(sorting.column, { ascending: sorting.order === 'asc' });
+    .from('support_tickets')
+    .select(`
+      *,
+      profiles ( full_name, email, avatar_url ),
+      ticket_messages (
+        id,
+        sender_id,
+        content,
+        created_at,
+        is_admin_message,
+        profiles ( full_name, avatar_url )
+      )
+    `, { count: 'exact' })
+    .order('created_at', { ascending: false });
 
-  if (statusFilter !== 'all') {
+  if (statusFilter && statusFilter !== 'all') {
     query = query.eq('status', statusFilter);
   }
-  if (typeFilter !== 'all') {
-    query = query.eq('type', typeFilter);
-  }
-  if (searchTerm) {
-    query = query.or(`subject.ilike.%${searchTerm}%,message.ilike.%${searchTerm}%`);
-  }
 
-  const from = (page - 1) * TICKETS_PER_PAGE;
-  const to = from + TICKETS_PER_PAGE - 1;
-  query = query.range(from, to);
+  query = query.range(offset, offset + pageSize - 1);
 
   const { data, error, count } = await query;
+
   if (error) throw new Error(error.message);
-  return { tickets: data as SupportTicket[], count: count ?? 0 };
+
+  const hasMore = (count || 0) > (offset + (data?.length || 0));
+  return { tickets: data || [], nextPage: hasMore ? pageParam + 1 : undefined };
 };
 
-const ManageSupportTickets = () => {
-  const [searchParams] = useSearchParams();
-  const currentPage = Number(searchParams.get("page") || "1");
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sorting, setSorting] = useState<{ column: string; order: 'asc' | 'desc' }>({ column: 'created_at', order: 'desc' });
+const updateTicketStatus = async ({ ticketId, status }: { ticketId: string, status: Ticket['status'] }) => {
+  const { error } = await supabase
+    .from('support_tickets')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', ticketId);
+  if (error) throw new Error(error.message);
+};
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["supportTickets", currentPage, statusFilter, typeFilter, searchTerm, sorting],
-    queryFn: () => fetchSupportTickets({ page: currentPage, statusFilter, typeFilter, searchTerm, sorting }),
+const sendTicketMessage = async ({ ticketId, senderId, content }: { ticketId: string, senderId: string, content: string }) => {
+  const { error } = await supabase
+    .from('ticket_messages')
+    .insert({
+      ticket_id: ticketId,
+      sender_id: senderId,
+      content,
+      is_admin_message: true,
+    });
+  if (error) throw new Error(error.message);
+};
+
+const ManageSupportTicketsPage = () => {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [adminReply, setAdminReply] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { ref, inView } = useInView();
+
+  const [currentTab, setCurrentTab] = useState<Ticket['status'] | 'all'>('new');
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: isLoadingTickets,
+    error,
+  } = useInfiniteQuery({
+    queryKey: ['adminSupportTickets', currentTab],
+    queryFn: ({ pageParam }) => fetchSupportTickets({ pageParam, statusFilter: currentTab }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
   });
 
-  const totalPages = data?.count ? Math.ceil(data.count / TICKETS_PER_PAGE) : 0;
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'question': return <HelpCircle className="h-4 w-4 text-blue-500" />;
-      case 'bug': return <Bug className="h-4 w-4 text-red-500" />;
-      case 'suggestion': return <Lightbulb className="h-4 w-4 text-yellow-500" />;
-      case 'other': return <MessageSquare className="h-4 w-4 text-gray-500" />;
-      default: return null;
+  useEffect(() => {
+    if (inView && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
     }
-  };
+  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'new': return <Badge variant="destructive" className="bg-red-500">Novo</Badge>;
-      case 'in_progress': return <Badge variant="secondary" className="bg-blue-500 text-white">Em Progresso</Badge>;
-      case 'resolved': return <Badge variant="default" className="bg-green-500">Resolvido</Badge>;
-      case 'closed': return <Badge variant="outline">Fechado</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
+  const updateStatusMutation = useMutation({
+    mutationFn: updateTicketStatus,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminSupportTickets'] });
+      showSuccess("Status do ticket atualizado!");
+    },
+    onError: (err: unknown) => {
+      if (err instanceof Error) {
+        showError(err.message);
+      } else {
+        showError("Ocorreu um erro desconhecido ao atualizar o status do ticket.");
+      }
+    },
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: sendTicketMessage,
+    onSuccess: () => {
+      setAdminReply('');
+      queryClient.invalidateQueries({ queryKey: ['adminSupportTickets'] });
+      showSuccess("Mensagem enviada!");
+    },
+    onError: (err: unknown) => {
+      if (err instanceof Error) {
+        showError(err.message);
+      } else {
+        showError("Ocorreu um erro desconhecido ao enviar a mensagem.");
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (isDetailsDialogOpen) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
+  }, [selectedTicket, isDetailsDialogOpen]);
+
+  useEffect(() => {
+    if (!selectedTicket?.id) return;
+
+    const channel = supabase
+      .channel(`ticket_messages:${selectedTicket.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'ticket_messages', filter: `ticket_id=eq.${selectedTicket.id}` },
+        (payload) => {
+          queryClient.setQueryData(['adminSupportTickets'], (oldData: Ticket[] | undefined) => {
+            if (!oldData) return [];
+            return oldData.map(ticket =>
+              ticket.id === selectedTicket.id
+                ? { ...ticket, ticket_messages: [...(ticket.ticket_messages || []), payload.new] }
+                : ticket
+            );
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedTicket?.id, queryClient]);
+
+  const handleViewDetails = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setIsDetailsDialogOpen(true);
   };
 
-  const handleSort = (column: string) => {
-    setSorting(prev => ({
-      column,
-      order: prev.column === column && prev.order === 'asc' ? 'desc' : 'asc'
-    }));
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !selectedTicket || adminReply.trim() === '') return;
+    sendMessageMutation.mutate({ ticketId: selectedTicket.id, senderId: user.id, content: adminReply });
   };
 
-  const SortableHeader = ({ column, label }: { column: string, label: string }) => (
-    <TableHead>
-      <Button variant="ghost" onClick={() => handleSort(column)} className="px-0">
-        {label}
-        {sorting.column === column && (
-          sorting.order === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
-        )}
-      </Button>
-    </TableHead>
-  );
+  const allTickets = data?.pages.flatMap(page => page.tickets) || [];
+
+  const renderTicketsTable = () => {
+    if (isLoadingTickets) {
+      return <div className="space-y-2 mt-4">
+        {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+      </div>;
+    }
+
+    if (error) {
+      return <p className="text-destructive">Falha ao carregar tickets: {error.message}</p>;
+    }
+
+    if (allTickets.length === 0) {
+      return <p className="text-center text-muted-foreground p-8">Nenhum ticket encontrado para esta categoria.</p>;
+    }
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Assunto</TableHead>
+            <TableHead>Usuário</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Última Atualização</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {allTickets.map((ticket) => (
+            <TableRow key={ticket.id}>
+              <TableCell className="font-medium">{ticket.subject}</TableCell>
+              <TableCell>{ticket.profiles?.full_name || 'Usuário Removido'}</TableCell>
+              <TableCell>{ticket.type}</TableCell>
+              <TableCell>
+                <Badge variant={ticket.status === 'resolved' || ticket.status === 'closed' ? 'default' : 'secondary'}>
+                  {ticket.status}
+                </Badge>
+              </TableCell>
+              <TableCell>{format(new Date(ticket.updated_at), 'dd/MM/yyyy HH:mm')}</TableCell>
+              <TableCell className="text-right">
+                <Button variant="ghost" size="icon" onClick={() => handleViewDetails(ticket)} disabled={updateStatusMutation.isPending || sendMessageMutation.isPending}>
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const isUpdatingStatus = updateStatusMutation.isPending;
+  const isSendingMessage = sendMessageMutation.isPending;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gestão de Suporte e Feedback</CardTitle>
-        <CardDescription>
-          Visualize e gerencie todas as mensagens de suporte e feedback dos usuários.
-        </CardDescription>
-        <div className="flex flex-col sm:flex-row gap-4 mt-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Filtrar por status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os Status</SelectItem>
-              <SelectItem value="new">Novo</SelectItem>
-              <SelectItem value="in_progress">Em Progresso</SelectItem>
-              <SelectItem value="resolved">Resolvido</SelectItem>
-              <SelectItem value="closed">Fechado</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Filtrar por tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os Tipos</SelectItem>
-              <SelectItem value="question">Dúvida</SelectItem>
-              <SelectItem value="bug">Problema/Bug</SelectItem>
-              <SelectItem value="suggestion">Sugestão</SelectItem>
-              <SelectItem value="other">Outro</SelectItem>
-            </SelectContent>
-          </Select>
-          <Input
-            type="search"
-            placeholder="Buscar por assunto ou mensagem..."
-            className="w-full sm:flex-grow"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+        <CardTitle>Gerenciar Tickets de Suporte</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHeader column="subject" label="Assunto" />
-                <TableHead>Usuário</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Status</TableHead>
-                <SortableHeader column="created_at" label="Criado Em" />
-                <SortableHeader column="updated_at" label="Última Atualização" />
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && Array.from({ length: 10 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell><Skeleton className="h-4 w-full" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-8 inline-block" /></TableCell>
-                </TableRow>
-              ))}
-              {isError && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-red-500">
-                    Erro ao carregar tickets: {error.message}
-                  </TableCell>
-                </TableRow>
-              )}
-              {!isLoading && !isError && data?.tickets.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    Nenhum ticket encontrado para os filtros selecionados.
-                  </TableCell>
-                </TableRow>
-              )}
-              {data?.tickets.map((ticket) => (
-                <TableRow key={ticket.id}>
-                  <TableCell className="font-medium max-w-[200px] truncate" title={ticket.subject}>{ticket.subject}</TableCell>
-                  <TableCell>
-                    {ticket.profiles?.full_name || ticket.profiles?.email || 'Usuário Desconhecido'}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {getTypeIcon(ticket.type)}
-                      <span className="capitalize">{ticket.type === 'question' ? 'Dúvida' : ticket.type === 'bug' ? 'Problema' : ticket.type === 'suggestion' ? 'Sugestão' : 'Outro'}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(ticket.status)}</TableCell>
-                  <TableCell className="text-xs">{format(new Date(ticket.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
-                  <TableCell className="text-xs">{format(new Date(ticket.updated_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
-                  <TableCell className="text-right">
-                    <Button asChild variant="ghost" size="icon">
-                      <Link to={`/admin/support-tickets/${ticket.id}`}>
-                        <Eye className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <PaginationControls currentPage={currentPage} totalPages={totalPages} />
+        <Tabs defaultValue="new" onValueChange={setCurrentTab}>
+            <TabsList>
+              <TabsTrigger value="new">Novos</TabsTrigger>
+              <TabsTrigger value="open">Abertos</TabsTrigger>
+              <TabsTrigger value="in_progress">Em Progresso</TabsTrigger>
+              <TabsTrigger value="resolved">Resolvidos</TabsTrigger>
+              <TabsTrigger value="closed">Fechados</TabsTrigger>
+              <TabsTrigger value="all">Todos</TabsTrigger>
+            </TabsList>
+            <TabsContent value={currentTab}>
+              {renderTicketsTable()}
+              <div ref={ref} className="col-span-full text-center py-4">
+                {isFetchingNextPage && <p>Carregando mais tickets...</p>}
+                {!hasNextPage && allTickets.length > 0 && <p>Você viu todos os tickets!</p>}
+              </div>
+            </TabsContent>
+        </Tabs>
       </CardContent>
+
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] flex flex-col max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Ticket #{selectedTicket?.id?.substring(0, 8)} - {selectedTicket?.subject}</DialogTitle>
+            {/* Correção aplicada aqui: Verificação explícita para selectedTicket.profiles */}
+            {selectedTicket?.profiles ? (
+              <DialogDescription>
+                Usuário: {selectedTicket.profiles.full_name || 'N/A'} ({selectedTicket.profiles.email || 'N/A'})
+              </DialogDescription>
+            ) : (
+              <DialogDescription>Usuário: Usuário Removido ou Não Encontrado</DialogDescription>
+            )}
+          </DialogHeader>
+          {selectedTicket && (
+            <div className="flex-1 overflow-y-auto p-4 border rounded-md bg-muted/50 space-y-4">
+              {/* Initial Message */}
+              <div className="flex items-end gap-2 justify-start">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={selectedTicket.profiles?.avatar_url || undefined} loading="lazy" />
+                  <AvatarFallback>{selectedTicket.profiles?.full_name?.charAt(0) || 'U'}</AvatarFallback>
+                </Avatar>
+                <div className="rounded-2xl p-3 max-w-[75%] bg-card text-card-foreground rounded-bl-none">
+                  {/* Correção aplicada aqui: Verificação explícita para selectedTicket.profiles */}
+                  <p className="font-semibold">{selectedTicket.profiles?.full_name || 'Usuário'}</p>
+                  <p>{selectedTicket.message}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{format(new Date(selectedTicket.created_at), 'dd/MM/yyyy HH:mm')}</p>
+                </div>
+              </div>
+
+              {/* Subsequent Messages */}
+              {selectedTicket.ticket_messages?.map((msg) => (
+                <div key={msg.id} className={cn("flex items-end gap-2", msg.is_admin_message ? "justify-end" : "justify-start")}>
+                  {!msg.is_admin_message && (
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={msg.profiles?.avatar_url || undefined} loading="lazy" />
+                      <AvatarFallback>{msg.profiles?.full_name?.charAt(0) || 'U'}</AvatarFallback>
+                    </Avatar>
+                  )}
+                  <div
+                    className={cn(
+                      "rounded-2xl p-3 max-w-[75%]",
+                      msg.is_admin_message ? "bg-primary text-primary-foreground rounded-br-none" : "bg-card text-card-foreground rounded-bl-none"
+                    )}
+                  >
+                    <p className="font-semibold">{msg.profiles?.full_name || (msg.is_admin_message ? 'Admin' : 'Usuário')}</p>
+                    <p>{msg.content}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{format(new Date(msg.created_at), 'dd/MM/yyyy HH:mm')}</p>
+                  </div>
+                  {msg.is_admin_message && (
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user?.user_metadata.avatar_url || undefined} loading="lazy" /> {/* Admin's avatar */}
+                      <AvatarFallback>{user?.user_metadata.full_name?.charAt(0) || 'A'}</AvatarFallback>
+                    </Avatar>
+                  )}
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+          <form onSubmit={handleSendMessage} className="flex items-center gap-2 mt-4">
+            <Textarea
+              placeholder="Digite sua resposta..."
+              value={adminReply}
+              onChange={(e) => setAdminReply(e.target.value)}
+              className="flex-1 resize-none"
+              rows={1}
+              disabled={isSendingMessage}
+            />
+            <Button type="submit" size="icon" disabled={isSendingMessage || adminReply.trim() === ''}>
+              {isSendingMessage ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
+            </Button>
+          </form>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)} disabled={isUpdatingStatus || isSendingMessage}>Fechar</Button>
+            {selectedTicket?.status !== 'resolved' && selectedTicket?.status !== 'closed' && (
+              <Button
+                onClick={() => updateStatusMutation.mutate({ ticketId: selectedTicket!.id, status: 'resolved' })}
+                disabled={isUpdatingStatus || isSendingMessage}
+                className="bg-green-500 hover:bg-green-600"
+              >
+                {isUpdatingStatus ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Resolvendo...
+                  </>
+                ) : (
+                  'Marcar como Resolvido'
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
 
-export default ManageSupportTickets;
+export default ManageSupportTicketsPage;

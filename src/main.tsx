@@ -1,16 +1,18 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './globals.css'; // Alterado para importar o arquivo de estilos global do Tailwind
-import { Providers } from './components/Providers';
-import ErrorBoundary from './components/ErrorBoundary'; // Importando o ErrorBoundary
+import { createRoot } from "react-dom/client";
+import App from "./App.tsx";
+import "./globals.css";
+import { AuthProvider } from "./contexts/AuthContext.tsx";
+import { registerServiceWorker } from "./utils/pushNotifications.ts"; // Importar a função de registro
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary> {/* Envolvendo o App com o ErrorBoundary */}
-      <Providers>
-        <App />
-      </Providers>
-    </ErrorBoundary>
-  </React.StrictMode>,
+// Registrar o Service Worker assim que o aplicativo for carregado
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    registerServiceWorker();
+  });
+}
+
+createRoot(document.getElementById("root")!).render(
+  <AuthProvider>
+    <App />
+  </AuthProvider>
 );

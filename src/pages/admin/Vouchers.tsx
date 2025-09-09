@@ -12,7 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Edit, Trash2, Loader2 } from "lucide-react";
+import { format } from 'date-fns';
+import { showError, showSuccess } from "@/utils/toast";
+import { PlusCircle, Edit, Trash2, Loader2 } from "lucide-react"; // Import Trash2 and Loader2
 import {
   Dialog,
   DialogContent,
@@ -36,91 +38,101 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { showError, showSuccess } from "@/utils/toast";
-import { Textarea } from "@/components/ui/textarea";
-import { formatPrice } from "@/utils/formatters";
 
-const creditPackageSchema = z.object({
-  amount: z.coerce.number().int().positive("A quantidade de créditos deve ser um número inteiro positivo."),
-  price_in_cents: z.coerce.number().int().positive("O preço em centavos deve ser um número inteiro positivo."),
-  description: z.string().optional().nullable(),
+const promoCodeSchema = z.object({
+  code: z.string().min(3, "Código é obrigatório"),
+  type: z.enum(["credit_bonus", "discount_credits", "free_boost"], { required_error: "Tipo é obrigatório" }),
+  value: z.coerce.number().positive("Valor deve ser positivo"),
+  max_uses: z.coerce.number().optional().nullable(),
+  expires_at: z.string().optional().nullable(),
   is_active: z.boolean().default(true),
 });
 
-type CreditPackageFormData = z.infer<typeof creditPackageSchema>;
+type PromoCodeFormData = z.infer<typeof promoCodeSchema>;
 
-const fetchCreditPackages = async () => {
-  const { data, error } = await supabase.from("credit_packages").select("*").order("amount", { ascending: true });
+const fetchPromoCodes = async () => {
+  const { data, error } = await supabase.from("promo_codes").select("*").order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return data;
 };
 
-const ManageCreditPackagesPage = () => {
+const VouchersPage = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [selectedCode, setSelectedCode] = useState<any>(null);
 
-  const { data: packages, isLoading, error } = useQuery({
-    queryKey: ["adminCreditPackages"],
-    queryFn: fetchCreditPackages,
+  const { data: codes, isLoading, error } = useQuery({
+    queryKey: ["promoCodes"],
+    queryFn: fetchPromoCodes,
   });
 
   const mutation = useMutation({
-    mutationFn: async (formData: { data: CreditPackageFormData, id?: string }) => {
+    mutationFn: async (formData: { data: PromoCodeFormData, id?: string }) => {
       const dataToSubmit = {
         ...formData.data,
-        description: formData.data.description || null,
+        expires_at: formData.data.expires_at || null,
+        max_uses: formData.data.max_uses || null,
       };
 
       if (formData.id) {
-        const { error } = await supabase.from("credit_packages").update(dataToSubmit).eq("id", formData.id);
+        const { error } = await supabase.from("promo_codes").update(dataToSubmit).eq("id", formData.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("credit_packages").insert(dataToSubmit);
+        const { error } = await supabase.from("promo_codes").insert(dataToSubmit);
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminCreditPackages"] });
-      queryClient.invalidateQueries({ queryKey: ["creditPackages"] }); // Invalidate public credit packages
-      showSuccess(`Pacote de crédito ${selectedPackage ? 'atualizado' : 'criado'} com sucesso!`);
+      queryClient.invalidateQueries({ queryKey: ["promoCodes"] });
+      showSuccess(`Voucher ${selectedCode ? 'atualizado' : 'criado'} com sucesso!`);
       setIsDialogOpen(false);
-      setSelectedPackage(null);
+      setSelectedCode(null);
     },
     onError: (err: any) => showError(err.message),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("credit_packages").delete().eq("id", id);
+      const { error } = await supabase.from("promo_codes").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminCreditPackages"] });
-      queryClient.invalidateQueries({ queryKey: ["creditPackages"] });
-      showSuccess("Pacote de crédito removido com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["promoCodes"] });
+      showSuccess("Voucher removido com sucesso!");
     },
     onError: (err: any) => showError(err.message),
   });
 
-  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<CreditPackageFormData>({
-    resolver: zodResolver(creditPackageSchema),
+  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<PromoCodeFormData>({
+    resolver: zodResolver(promoCodeSchema),
   });
 
-  const onSubmit = (data: CreditPackageFormData) => {
-    mutation.mutate({ data, id: selectedPackage?.id });
+  const onSubmit = (data: PromoCodeFormData) => {
+    mutation.mutate({ data, id: selectedCode?.id });
   };
 
-  const handleOpenDialog = (pkg: any = null) => {
-    setSelectedPackage(pkg);
-    if (pkg) {
-      reset(pkg);
+  const handleOpenDialog = (code: any = null) => {
+    setSelectedCode(code);
+    if (code) {
+      reset({
+        ...code,
+        expires_at: code.expires_at ? format(new Date(code.expires_at), "yyyy-MM-dd") : null,
+      });
     } else {
       reset({
-        amount: 0,
-        price_in_cents: 0,
-        description: null,
+        code: '',
+        type: undefined,
+        value: 0,
+        max_uses: null,
+        expires_at: null,
         is_active: true,
       });
     }
@@ -137,36 +149,40 @@ const ManageCreditPackagesPage = () => {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Gerenciar Pacotes de Crédito</CardTitle>
+        <CardTitle>Gerenciar Vouchers</CardTitle>
         <Button onClick={() => handleOpenDialog()} disabled={isFormDisabled || isDeleting}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Novo Pacote
+          <PlusCircle className="mr-2 h-4 w-4" /> Novo Voucher
         </Button>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-64 w-full" />
         ) : error ? (
-          <p className="text-destructive">Falha ao carregar pacotes de crédito.</p>
+          <p className="text-destructive">Falha ao carregar vouchers.</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Créditos</TableHead>
-                <TableHead>Preço</TableHead>
-                <TableHead>Descrição</TableHead>
+                <TableHead>Código</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Valor</TableHead>
+                <TableHead>Usos</TableHead>
+                <TableHead>Expira em</TableHead>
                 <TableHead>Ativo</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {packages?.map((pkg) => (
-                <TableRow key={pkg.id}>
-                  <TableCell>{pkg.amount}</TableCell>
-                  <TableCell>{formatPrice(pkg.price_in_cents)}</TableCell>
-                  <TableCell>{pkg.description || 'N/A'}</TableCell>
-                  <TableCell>{pkg.is_active ? 'Sim' : 'Não'}</TableCell>
+              {codes?.map((code) => (
+                <TableRow key={code.id}>
+                  <TableCell>{code.code}</TableCell>
+                  <TableCell>{code.type}</TableCell>
+                  <TableCell>{code.value}</TableCell>
+                  <TableCell>{code.current_uses}/{code.max_uses || '∞'}</TableCell>
+                  <TableCell>{code.expires_at ? format(new Date(code.expires_at), 'dd/MM/yyyy') : 'Nunca'}</TableCell>
+                  <TableCell>{code.is_active ? 'Sim' : 'Não'}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(pkg)} disabled={isFormDisabled || isDeleting}>
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(code)} disabled={isFormDisabled || isDeleting}>
                       <Edit className="h-4 w-4" />
                     </Button>
                     <AlertDialog>
@@ -179,12 +195,12 @@ const ManageCreditPackagesPage = () => {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Esta ação não pode ser desfeita. Isso removerá permanentemente este pacote de crédito.
+                            Esta ação não pode ser desfeita. Isso removerá permanentemente o voucher "{code.code}".
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(pkg.id)} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                          <AlertDialogAction onClick={() => handleDelete(code.id)} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
                             {isDeleting ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -207,22 +223,44 @@ const ManageCreditPackagesPage = () => {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedPackage ? 'Editar' : 'Novo'} Pacote de Crédito</DialogTitle>
+            <DialogTitle>{selectedCode ? 'Editar' : 'Novo'} Voucher</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <Label htmlFor="amount">Quantidade de Créditos</Label>
-              <Input id="amount" type="number" {...register("amount")} disabled={isFormDisabled} />
-              {errors.amount && <p className="text-destructive text-sm">{errors.amount.message}</p>}
+              <Label htmlFor="code">Código</Label>
+              <Input id="code" {...register("code")} disabled={isFormDisabled} />
+              {errors.code && <p className="text-destructive text-sm">{errors.code.message}</p>}
             </div>
             <div>
-              <Label htmlFor="price_in_cents">Preço em Centavos</Label>
-              <Input id="price_in_cents" type="number" {...register("price_in_cents")} disabled={isFormDisabled} />
-              {errors.price_in_cents && <p className="text-destructive text-sm">{errors.price_in_cents.message}</p>}
+              <Label>Tipo</Label>
+              <Controller
+                name="type"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isFormDisabled}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="credit_bonus">Bônus de Crédito</SelectItem>
+                      <SelectItem value="discount_credits">Desconto em Créditos</SelectItem>
+                      <SelectItem value="free_boost">Impulso Grátis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.type && <p className="text-destructive text-sm">{errors.type.message}</p>}
             </div>
             <div>
-              <Label htmlFor="description">Descrição (Opcional)</Label>
-              <Textarea id="description" {...register("description")} disabled={isFormDisabled} />
+              <Label htmlFor="value">Valor</Label>
+              <Input id="value" type="number" {...register("value")} disabled={isFormDisabled} />
+              {errors.value && <p className="text-destructive text-sm">{errors.value.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="max_uses">Usos Máximos (opcional)</Label>
+              <Input id="max_uses" type="number" {...register("max_uses")} disabled={isFormDisabled} />
+            </div>
+            <div>
+              <Label htmlFor="expires_at">Data de Expiração (opcional)</Label>
+              <Input id="expires_at" type="date" {...register("expires_at")} disabled={isFormDisabled} />
             </div>
             <div className="flex items-center space-x-2">
               <Controller
@@ -254,4 +292,4 @@ const ManageCreditPackagesPage = () => {
   );
 };
 
-export default ManageCreditPackagesPage;
+export default VouchersPage;
