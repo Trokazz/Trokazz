@@ -1,18 +1,38 @@
-import { Link, useLocation } from "react-router-dom";
-import { Home, List, MessageSquare, Heart, Settings, LayoutGrid } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Home, List, MessageSquare, Heart, Settings, LayoutGrid, LogOut, Gift, ReceiptText, Ticket, DollarSign } from "lucide-react"; // Adicionado Gift, ReceiptText, Ticket, DollarSign
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { showError, showSuccess } from "@/utils/toast";
 
 const navItems = [
   { href: "/", label: "Início", icon: Home },
   { href: "/categories", label: "Categorias", icon: LayoutGrid },
-  { href: "/listings", label: "Meus Anúncios", icon: List },
+  { href: "/profile/my-ads", label: "Meus Anúncios", icon: List },
   { href: "/messages", label: "Mensagens", icon: MessageSquare },
-  { href: "/favorites", label: "Favoritos", icon: Heart },
+  { href: "/profile/favorites", label: "Favoritos", icon: Heart },
+  { href: "/profile/my-offers-made", label: "Minhas Ofertas", icon: Gift }, // Novo item
+  { href: "/profile/my-offers-received", label: "Ofertas Recebidas", icon: Gift }, // Novo item
+  { href: "/profile/transactions", label: "Minhas Transações", icon: ReceiptText }, // Novo item
+  { href: "/redeem", label: "Resgatar Voucher", icon: Ticket }, // Novo item
+  { href: "/buy-credits", label: "Comprar Créditos", icon: DollarSign }, // Novo item
   { href: "/profile/user-settings", label: "Configurações", icon: Settings },
 ];
 
 const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth(); // Para verificar se o usuário está logado
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      showError("Erro ao fazer logout: " + error.message);
+    } else {
+      showSuccess("Logout realizado com sucesso!");
+      navigate('/auth');
+    }
+  };
 
   return (
     <div className="hidden md:flex flex-col h-full bg-primary text-primary-foreground">
@@ -38,6 +58,15 @@ const Sidebar = () => {
             {item.label}
           </Link>
         ))}
+        {user && ( // Renderiza o botão de logout apenas se o usuário estiver logado
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-primary-foreground/10 hover:text-primary-foreground w-full text-left text-destructive-foreground/80 hover:text-destructive"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </button>
+        )}
       </nav>
     </div>
   );

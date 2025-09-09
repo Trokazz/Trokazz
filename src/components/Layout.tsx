@@ -6,6 +6,7 @@ import BottomNav from "./BottomNav";
 import { useLocation } from "react-router-dom";
 import NotificationsPanel from "./NotificationsPanel"; // Import NotificationsPanel
 import Footer from "./Footer"; // Import Footer
+import DesktopFab from "./DesktopFab"; // Import DesktopFab
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -42,6 +43,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         {/* The fixed footer for AdDetailsPage is now part of AdDetails.tsx itself */}
         {!isAdDetailsPage && <Footer />} {/* Add Footer here for mobile, but not on AdDetailsPage */}
       </div>
+      <DesktopFab /> {/* Add DesktopFab here */}
     </div>
   );
 };
