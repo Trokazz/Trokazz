@@ -1,62 +1,60 @@
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { showSuccess } from "@/utils/toast";
-import { Copy, Facebook, MessageCircle } from "lucide-react";
+import { Share2 } from "lucide-react";
+import { showInfo, showError } from "@/utils/toast";
 
 interface ShareButtonsProps {
-  title: string;
-  url: string;
+  adTitle: string;
+  adUrl: string;
 }
 
-const ShareButtons = ({ title, url }: ShareButtonsProps) => {
-  const encodedUrl = encodeURIComponent(url);
-  const encodedTitle = encodeURIComponent(`Confira este anúncio: ${title}`);
+export const ShareButtons = ({ adTitle, adUrl }: ShareButtonsProps) => {
+  const shareText = `Confira este anúncio na Trokazz: ${adTitle} - ${adUrl}`;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(url);
-    showSuccess("Link copiado para a área de transferência!");
+  const handleWhatsAppShare = () => {
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`, '_blank');
   };
 
-  const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedTitle}%20${encodedUrl}`;
-  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`;
+  const handleFacebookShare = () => {
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(adUrl)}&quote=${encodeURIComponent(adTitle)}`, '_blank');
+  };
+
+  const handleInstagramShare = () => {
+    showInfo("Para compartilhar no Instagram, copie o link e cole na sua história ou postagem.");
+    navigator.clipboard.writeText(adUrl).then(() => {
+      window.open('https://www.instagram.com/', '_blank');
+    }).catch(err => {
+      console.error("Erro ao copiar link para Instagram:", err);
+      showError("Não foi possível copiar o link. Por favor, copie manualmente.");
+    });
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: adTitle,
+          text: `Confira este anúncio: ${adTitle}`,
+          url: adUrl,
+        });
+      } catch (error) {
+        console.error("Erro ao compartilhar:", error);
+        showInfo("Erro ao compartilhar. Tente copiar o link.");
+      }
+    } else {
+      navigator.clipboard.writeText(adUrl).then(() => {
+        showInfo("Link do anúncio copiado para a área de transferência!");
+      }).catch(err => {
+        console.error("Erro ao copiar link:", err);
+        showError("Não foi possível copiar o link. Por favor, copie manualmente.");
+      });
+    }
+  };
 
   return (
-    <div className="pt-4 border-t">
-        <h3 className="font-semibold mb-2">Compartilhar</h3>
-        <div className="flex items-center gap-2">
-            <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button asChild variant="outline" size="icon">
-                            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" aria-label="Compartilhar no WhatsApp">
-                                <MessageCircle className="h-5 w-5 text-green-500" />
-                            </a>
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Compartilhar no WhatsApp</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button asChild variant="outline" size="icon">
-                            <a href={facebookUrl} target="_blank" rel="noopener noreferrer" aria-label="Compartilhar no Facebook">
-                                <Facebook className="h-5 w-5 text-blue-600" />
-                            </a>
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Compartilhar no Facebook</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="outline" size="icon" onClick={handleCopy}>
-                            <Copy className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Copiar Link</p></TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-        </div>
+    <div className="flex items-center gap-4">
+      <Button onClick={handleNativeShare} size="icon" className="bg-card text-card-foreground hover:bg-card/90 rounded-full h-12 w-12">
+        <Share2 className="h-6 w-6" />
+      </Button>
     </div>
   );
 };
-
-export default ShareButtons;

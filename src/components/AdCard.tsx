@@ -1,127 +1,126 @@
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Heart, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Heart, Zap } from "lucide-react";
-import { Button } from "./ui/button";
-import { useState } from "react";
-import { useSession } from "@/contexts/SessionContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
-import { showError } from "@/utils/toast";
-import { Badge } from "./ui/badge";
-import { safeFormatDistanceToNow, getOptimizedImageUrl } from "@/lib/utils";
-import { Advertisement, UserLevelDetails } from "@/types/database"; // Importa Advertisement e UserLevelDetails
-
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import * as Icons from "lucide-react"; // Importar todos os ícones Lucide
+import { showError, showSuccess } from "@/utils/toast";
+import { cn } from "@/lib/utils";
+import { formatPrice } from "@/utils/formatters"; // Importando formatPrice
 
 interface AdCardProps {
-  ad: Advertisement;
-  isInitiallyFavorited?: boolean;
+  id: string;
+  title: string;
+  price: number | string;
+  location: string;
+  image: string;
+  oldPrice?: string;
 }
 
-const AdCard = ({ ad, isInitiallyFavorited = false }: AdCardProps) => {
-  const { user } = useSession();
+const fetchUserFavorites = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('ad_id')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return new Set(data.map(fav => fav.ad_id));
+};
+
+const toggleFavoriteStatus = async ({ userId, adId, isFavorited }: { userId: string; adId: string; isFavorited: boolean }) => {
+  if (isFavorited) {
+    const { error } = await supabase.from('favorites').delete().eq('user_id', userId).eq('ad_id', adId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('favorites').insert({ user_id: userId, ad_id: adId });
+    if (error) throw error;
+  }
+};
+
+export const AdCard = ({ id, title, price, location, image, oldPrice }: AdCardProps) => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [isFavorited, setIsFavorited] = useState(isInitiallyFavorited);
-  const isBoosted = ad.boosted_until && new Date(ad.boosted_until) > new Date();
 
-  const formattedPrice = new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(ad.price);
+  const { data: userFavorites, isLoading: isLoadingFavorites } = useQuery({
+    queryKey: ['userFavorites', user?.id],
+    queryFn: () => fetchUserFavorites(user!.id),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 
-  const handleFavoriteClick = async () => {
+  const isFavorited = userFavorites?.has(id) || false;
+
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: toggleFavoriteStatus,
+    onMutate: async ({ adId, isFavorited }) => {
+      // Optimistic update
+      await queryClient.cancelQueries({ queryKey: ['userFavorites', user?.id] });
+      const previousFavorites = queryClient.getQueryData<Set<string>>(['userFavorites', user?.id]);
+      
+      if (previousFavorites) {
+        const newFavorites = new Set(previousFavorites);
+        if (isFavorited) {
+          newFavorites.delete(adId);
+        } else {
+          newFavorites.add(adId);
+        }
+        queryClient.setQueryData(['userFavorites', user?.id], newFavorites);
+      }
+      return { previousFavorites };
+    },
+    onError: (err, variables, context) => {
+      showError(err.message);
+      if (context?.previousFavorites) {
+        queryClient.setQueryData(['userFavorites', user?.id], context.previousFavorites);
+      }
+    },
+    onSuccess: (_, variables) => {
+      showSuccess(variables.isFavorited ? "Removido dos favoritos!" : "Adicionado aos favoritos!");
+      queryClient.invalidateQueries({ queryKey: ['userFavorites', user?.id] });
+    },
+  });
+
+  const handleToggleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigating to ad details
     if (!user) {
       showError("Você precisa estar logado para favoritar anúncios.");
       return;
     }
-
-    const currentlyFavorited = isFavorited;
-    setIsFavorited(!currentlyFavorited); // Optimistic update
-
-    try {
-      if (currentlyFavorited) {
-        const { error } = await supabase.from("favorites").delete().match({ user_id: user.id, ad_id: ad.id });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("favorites").insert({ user_id: user.id, ad_id: ad.id });
-        if (error) throw error;
-      }
-      queryClient.invalidateQueries({ queryKey: ["favoriteAds"] });
-      queryClient.invalidateQueries({ queryKey: ["userFavoriteIds"] });
-    } catch (err) {
-      setIsFavorited(currentlyFavorited); // Revert on error
-      showError("Ocorreu um erro ao atualizar seus favoritos.");
-    }
+    toggleFavoriteMutation.mutate({ userId: user.id, adId: id, isFavorited });
   };
 
-  // Obtém a URL pública da primeira imagem usando o caminho relativo
-  // A função getOptimizedImageUrl agora recebe o caminho relativo e o bucket
-  const optimizedImageUrl = ad.image_urls?.[0] ? getOptimizedImageUrl(ad.image_urls[0], { width: 400, height: 400 }, 'advertisements') : undefined;
-
-  const sellerLevel: UserLevelDetails | null | undefined = ad.profiles?.userLevelDetails;
-  const LevelIcon = sellerLevel?.badge_icon ? (Icons as any)[sellerLevel.badge_icon] || Icons.User : Icons.User;
-
   return (
-    <Card className="overflow-hidden transition-shadow hover:shadow-lg h-full flex flex-col group relative">
-      <Link to={`/anuncio/${ad.id}`} className="absolute inset-0 z-10" aria-label={ad.title} />
-      {isBoosted && (
-        <Badge className="absolute top-2 left-2 z-20 bg-yellow-400 text-black hover:bg-yellow-500 pointer-events-none">
-          <Zap className="h-3 w-3 mr-1" />
-          Destaque
-        </Badge>
-      )}
-      {sellerLevel && sellerLevel.level_name !== 'newbie' && ( // Exibe o badge apenas se não for 'newbie'
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge className="absolute top-2 right-10 z-20 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50 cursor-help">
-              <LevelIcon className="h-3 w-3 mr-1" />
-              {sellerLevel.level_name}
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{sellerLevel.description}</p>
-          </TooltipContent>
-        </Tooltip>
-      )}
-      <div className="flex flex-col h-full bg-card">
-        <CardHeader className="p-0">
+    <Link to={`/ad/${id}`}>
+      <Card className="overflow-hidden group rounded-lg shadow-sm hover:shadow-md transition-shadow h-full">
+        <div className="relative">
           <img
-            src={optimizedImageUrl || '/placeholder.svg'}
-            alt={ad.title}
-            className="w-full h-48 object-cover"
+            src={image}
+            alt={title}
+            className="w-full h-40 object-cover md:h-48"
             loading="lazy"
           />
-        </CardHeader>
-        <CardContent className="p-4 flex-grow">
-          <CardTitle className="text-lg font-semibold mb-2 truncate">{ad.title}</CardTitle>
-          <p className="text-xl font-bold text-foreground">{formattedPrice}</p>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="absolute top-2 right-2 bg-white/80 hover:bg-white rounded-full h-8 w-8"
+            onClick={handleToggleFavorite}
+            disabled={isLoadingFavorites || toggleFavoriteMutation.isPending}
+          >
+            <Heart className={cn("h-4 w-4", isFavorited ? "text-red-500 fill-red-500" : "text-muted-foreground")} />
+          </Button>
+        </div>
+        <CardContent className="p-3 md:p-4">
+          <h3 className="text-sm md:text-md font-semibold mb-1 truncate">{title}</h3>
+          <div className="flex items-baseline gap-2">
+            <p className="text-md md:text-lg font-bold text-accent">{formatPrice(price)}</p>
+            {oldPrice && <p className="text-xs md:text-sm text-muted-foreground line-through">{oldPrice}</p>}
+          </div>
+          <div className="flex items-center text-xs md:text-sm text-muted-foreground mt-1">
+            <MapPin className="h-3 w-3 md:h-4 md:w-4 mr-1" />
+            <span>{location}</span>
+          </div>
         </CardContent>
-        <CardFooter className="p-4 pt-0">
-          <p className="text-sm text-muted-foreground">{safeFormatDistanceToNow(ad.created_at)} - Dourados, MS</p>
-        </CardFooter>
-      </div>
-      {user && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-2 right-2 z-20 bg-black/30 hover:bg-black/50 text-white rounded-full"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleFavoriteClick();
-          }}
-          aria-label="Adicionar aos favoritos"
-        >
-          <Heart className={`h-5 w-5 transition-colors ${isFavorited ? 'fill-red-500 text-red-500' : ''}`} />
-        </Button>
-      )}
-    </Card>
+      </Card>
+    </Link>
   );
 };
-
-export default AdCard;
