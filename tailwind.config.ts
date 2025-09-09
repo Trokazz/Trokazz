@@ -44,7 +44,6 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
-        "accent-gradient": "hsl(var(--accent-gradient))",
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
@@ -62,12 +61,6 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
-        },
-        // New custom color for OLX-like buttons
-        'olx-orange': {
-          DEFAULT: 'hsl(var(--olx-orange))',
-          foreground: 'hsl(var(--olx-orange-foreground))',
-          darker: 'hsl(var(--olx-orange-darker))', // New darker shade for hover
         },
       },
       borderRadius: {
@@ -92,23 +85,12 @@ export default {
             height: "0",
           },
         },
-        "fade-in-up": {
-          "0%": {
-            opacity: "0",
-            transform: "translateY(10px)",
-          },
-          "100%": {
-            opacity: "1",
-            transform: "translateY(0)",
-          },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in-up": "fade-in-up 0.5s ease-out forwards",
       },
     },
   },
-  plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography"), require("@tailwindcss/line-clamp")],
+  plugins: [require("tailwindcss-animate")],
 } satisfies Config;
